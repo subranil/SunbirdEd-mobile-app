@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@angular/core';
 import { AppGlobalService } from '@app/services/app-global-service.service';
 import { AppVersion } from '@ionic-native/app-version/ngx';
 import { TranslateService } from '@ngx-translate/core';
-import { Events } from '@ionic/angular';
+import { Events } from '@app/util/events';
 import {
     CachedItemRequestSourceFrom,
     CategoryTerm,
@@ -357,11 +357,7 @@ export class FormAndFrameworkUtilService {
         let currentConfiguration;
         this.formService.getForm(req).toPromise()
             .then((res: any) => {
-                res.form.data.fields.forEach((ele, index) => {
-                    if (ele.code === 'pdf') {
-                        currentConfiguration = ele.values[index].isEnabled;
-                    }
-                });
+                currentConfiguration = res.form.data; 
                 this.appGlobalService.setpdfPlayerconfiguration(currentConfiguration);
                 resolve(currentConfiguration);
             }).catch((error: any) => {
@@ -502,7 +498,7 @@ export class FormAndFrameworkUtilService {
                             });
                     } else {
                         keysLength++;
-                        if (categoryKeysLen === keysLength && (profileData.profileType === ProfileType.ADMIN)) {
+                        if (categoryKeysLen === keysLength) {
                             this.updateProfileInfo(profile, profileData, eventParams)
                                 .then((response) => {
                                     resolve(response);

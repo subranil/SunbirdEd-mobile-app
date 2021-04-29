@@ -12,7 +12,8 @@ import {
     LocalCourseService, PageId, InteractType
 } from '../../services';
 import { NgZone } from '@angular/core';
-import { Events, PopoverController, Platform } from '@ionic/angular';
+import { PopoverController, Platform } from '@ionic/angular';
+import { Events } from '@app/util/events';
 import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
@@ -40,6 +41,7 @@ import { ConsentService } from '../../services/consent-service';
 import {
     TncUpdateHandlerService,
 } from '../../services/handlers/tnc-update-handler.service';
+import { DiscussionTelemetryService } from '@app/services/discussion/discussion-telemetry.service';
 import { mockProfileData } from '../profile/profile.page.spec.data';
 import { CourseBatchStatus, CourseEnrollmentType, DiscussionService, SortOrder } from '@project-sunbird/sunbird-sdk';
 
@@ -132,6 +134,9 @@ describe('EnrolledCourseDetailsPage', () => {
     const mockDiscussionService: Partial<DiscussionService> = {
         getForumIds: jest.fn()
     };
+    const mockDiscussionTelemetryService: Partial<DiscussionTelemetryService> = {
+    };
+    
 
     beforeAll(() => {
         enrolledCourseDetailsPage = new EnrolledCourseDetailsPage(
@@ -164,7 +169,8 @@ describe('EnrolledCourseDetailsPage', () => {
             mockContentPlayerHandler as ContentPlayerHandler,
             mockCategoryKeyTranslator as CategoryKeyTranslator,
             mockConsentService as ConsentService,
-            mockTncUpdateHandlerService as TncUpdateHandlerService
+            mockTncUpdateHandlerService as TncUpdateHandlerService,
+            mockDiscussionTelemetryService as DiscussionTelemetryService
         );
     });
 
@@ -187,6 +193,13 @@ describe('EnrolledCourseDetailsPage', () => {
             mockCommonUtilService.getAppName = jest.fn(() => Promise.resolve('DIKSHA'));
             mockDownloadService.trackDownloads = jest.fn(() => of());
             spyOn(enrolledCourseDetailsPage, 'subscribeUtilityEvents').and.returnValue('BASE_URL');
+            const mockProfileRes = {
+                serverProfile: {
+                    userName: 'some_user'
+                }
+            };
+            mockProfileService.getActiveSessionProfile = jest.fn(() => of(mockProfileRes) as any);
+            mockAppGlobalService.getActiveProfileUid = jest.fn(() => Promise.resolve('some_uid'));
             // act
             enrolledCourseDetailsPage.ngOnInit();
             // assert
@@ -978,7 +991,6 @@ describe('EnrolledCourseDetailsPage', () => {
                 expect(mockContentService.getContentDetails).toHaveBeenCalledWith(option);
                 expect(mockZone.run).toHaveBeenCalled();
                 expect(mockContentService.getContentHeirarchy).toBeCalled();
-                expect(enrolledCourseDetailsPage.getContentState).toBeCalled();
                 expect(enrolledCourseDetailsPage.extractApiResponse).toHaveBeenCalled();
                 done();
             }, 0);
@@ -1931,6 +1943,58 @@ describe('EnrolledCourseDetailsPage', () => {
             expect(mockRouter.navigate).toBeCalled();
             done();
         });
+
+        it('should show toast message for internet error', (done) => {
+            // arrnge
+            const dismissFn = jest.fn(() => Promise.resolve());
+            const presentFn = jest.fn(() => Promise.resolve());
+            mockCommonUtilService.getLoader = jest.fn(() => Promise.resolve({
+                present: presentFn,
+                dismiss: dismissFn
+            }));
+            mockCommonUtilService.networkInfo = {
+                isNetworkAvailable: false
+            };
+            enrolledCourseDetailsPage.batches = [];
+            mockCommonUtilService.showToast = jest.fn();
+            // act
+            enrolledCourseDetailsPage.navigateToBatchListPage();
+            // assert
+            setTimeout(() => {
+                expect(mockCommonUtilService.getLoader).toHaveBeenCalled();
+                expect(mockCommonUtilService.networkInfo.isNetworkAvailable).toBeFalsy();
+                expect(enrolledCourseDetailsPage.batches.length).toBe(0);
+                expect(mockCommonUtilService.showToast).toHaveBeenCalledWith('ERROR_NO_INTERNET_MESSAGE');
+                expect(dismissFn).toBeTruthy();
+                done();
+            }, 0);
+        });
+
+        // it('should show toast message if batches is empty', (done) => {
+        //     // arrnge
+        //     const dismissFn = jest.fn(() => Promise.resolve());
+        //     const presentFn = jest.fn(() => Promise.resolve());
+        //     mockCommonUtilService.getLoader = jest.fn(() => Promise.resolve({
+        //         present: presentFn,
+        //         dismiss: dismissFn
+        //     }));
+        //     mockCommonUtilService.networkInfo = {
+        //         isNetworkAvailable: true
+        //     };
+        //     enrolledCourseDetailsPage.batches = [];
+        //     // mockCommonUtilService.showToast = jest.fn();
+        //     // act
+        //     enrolledCourseDetailsPage.navigateToBatchListPage();
+        //     // assert
+        //     setTimeout(() => {
+        //         expect(mockCommonUtilService.getLoader).toHaveBeenCalled();
+        //         expect(mockCommonUtilService.networkInfo.isNetworkAvailable).toBeTruthy();
+        //         expect(enrolledCourseDetailsPage.batches.length).toBe(0);
+        //         // expect(mockCommonUtilService.showToast).toHaveBeenCalledWith('NO_BATCHES_AVAILABLE');
+        //         expect(dismissFn).toBeTruthy();
+        //         done();
+        //     }, 0);
+        // });
     });
 
     describe('startLearning()', () => {
@@ -2700,136 +2764,6 @@ describe('EnrolledCourseDetailsPage', () => {
                 expect(enrolledCourseDetailsPage.showShareData).toBeFalsy();
                 done();
             }, 0);
-        });
-    });
-    describe('fetchForumIds', () => {
-        it('should fetch forumids with apropriate request ', (done) => {
-            // arrange
-            const res = {
-                result: [
-                    {
-                        cid: 'some_cid'
-                    }
-                ]
-            }
-            mockDiscussionService.getForumIds = jest.fn(() => of(res));
-            enrolledCourseDetailsPage.course ={
-                createdBy: 'some_id'
-            };
-            enrolledCourseDetailsPage.userId = 'some_id';
-            enrolledCourseDetailsPage.identifier = 'some_course_id'
-            
-            // jest.spyOn(enrolledCourseDetailsPage, 'prepareRequestBody').mockImplementation(() => {
-            //     return {
-            //         identifier: ['some_id'],
-            //         type: 'some_type'
-            //     }
-            // });
-            // act
-            enrolledCourseDetailsPage.fetchForumIds()
-            // assert
-            setTimeout(() => {
-                expect(mockDiscussionService.getForumIds).toHaveBeenCalled();
-                // expect(enrolledCourseDetailsPage.forumIds).toEqual('some_cid');
-                done()
-            });
-            
-        });
-        it('should fetch forumids with apropriate request ', (done) => {
-            // arrange
-            const res = {
-                result: [
-                    {
-                        cid: 'some_cid'
-                    }
-                ]
-            }
-            enrolledCourseDetailsPage.course ={
-                createdBy: 'some_id'
-            };
-            enrolledCourseDetailsPage.userId = 'some_other_id';
-            enrolledCourseDetailsPage.identifier = 'some_course_id';
-            enrolledCourseDetailsPage.isAlreadyEnrolled = true;
-            mockDiscussionService.getForumIds = jest.fn(() => of(res));
-            // jest.spyOn(enrolledCourseDetailsPage, 'prepareRequestBody').mockImplementation(() => {
-            //     return {
-            //         identifier: ['some_id'],
-            //         type: 'some_type'
-            //     }
-            // });
-            // act
-            enrolledCourseDetailsPage.fetchForumIds()
-            // assert
-            setTimeout(() => {
-                expect(mockDiscussionService.getForumIds).toHaveBeenCalled();
-                // expect(enrolledCourseDetailsPage.forumIds).toEqual('some_cid');
-                done();
-            });
-            
-        });
-    });
-    describe('checkUserRegistration', () => {
-        it('should register user with apropriate request ', (done) => {
-            // arrange
-            const profileRes = {
-                serverProfile: [
-                    {
-                        userName: 'some_user_name'
-                    }
-                ]
-            }
-            mockProfileService.getActiveSessionProfile = jest.fn(() => of(profileRes));
-            const res = {
-                result: {
-                    userName: 'some_user'
-                }
-                
-            }
-            mockDiscussionService.createUser = jest.fn(() => of(res));
-            enrolledCourseDetailsPage.forumIds = 'forum_id';
-            // act
-            enrolledCourseDetailsPage.checkUserRegistration()
-            // assert
-            setTimeout(() => {
-                expect(mockRouter.navigate).toHaveBeenCalledWith(
-                    ['/discussion-forum'],
-                    {
-                        queryParams: {
-                            categories: JSON.stringify({result:['forum_id']}),
-                            userName: 'some_user'
-                        }
-                    }
-                );
-                done()
-            })
-            
-        });
-        it('should handle error while registering user ', (done) => {
-            // arrange
-            mockCommonUtilService.showToast = jest.fn();
-            const profileRes = {
-                serverProfile: [
-                    {
-                        userName: 'some_user_name'
-                    }
-                ]
-            }
-            mockProfileService.getActiveSessionProfile = jest.fn(() => of(profileRes));
-            const res = {
-                result: {
-                    userName: 'some_user'
-                }
-                
-            }
-            mockDiscussionService.createUser = jest.fn(() => throwError('some_err'));
-            enrolledCourseDetailsPage.forumIds = 'forum_id';
-            // act
-            enrolledCourseDetailsPage.checkUserRegistration()
-            // assert
-            setTimeout(() => {
-                expect(mockCommonUtilService.showToast).toHaveBeenCalled()
-                done()
-            })
         });
     });
 });

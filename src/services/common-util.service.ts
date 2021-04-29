@@ -2,20 +2,20 @@ import { Injectable, NgZone, Inject } from '@angular/core';
 import {
     ToastController,
     LoadingController,
-    Events,
     PopoverController,
     Platform,
 } from '@ionic/angular';
+import { Events } from '@app/util/events';
 import { TranslateService } from '@ngx-translate/core';
 import { Network } from '@ionic-native/network/ngx';
 import { WebView } from '@ionic-native/ionic-webview/ngx';
 import {
     SharedPreferences, ProfileService, Profile, ProfileType,
-    CorrelationData, CachedItemRequestSourceFrom, LocationSearchCriteria
+    CorrelationData, CachedItemRequestSourceFrom, LocationSearchCriteria, TelemetryService
 } from 'sunbird-sdk';
 import {
     PreferenceKey, ProfileConstants, RouterLinks,
-    appLanguages, Location as loc
+    appLanguages, Location as loc, MaxAttempt, SwitchableTabsConfig
 } from '@app/app/app.constant';
 import { TelemetryGeneratorService } from '@app/services/telemetry-generator.service';
 import {
@@ -55,6 +55,7 @@ export class CommonUtilService {
     constructor(
         @Inject('SHARED_PREFERENCES') private preferences: SharedPreferences,
         @Inject('PROFILE_SERVICE') private profileService: ProfileService,
+        @Inject('TELEMETRY_SERVICE') private telemetryService: TelemetryService,
         private translate: TranslateService,
         private loadingCtrl: LoadingController,
         private events: Events,
@@ -552,8 +553,13 @@ export class CommonUtilService {
         const toast = await this.toastController.create({
             message: this.translateMessage(description, appName),
             cssClass: 'permissionSettingToast',
-            showCloseButton: true,
-            closeButtonText: this.translateMessage('SETTINGS'),
+            buttons: [
+                {
+                    text: this.translateMessage('SETTINGS'),
+                    role: 'cancel',
+                    handler: () => {}
+                }
+            ],
             position: 'bottom',
             duration: 3000
         });
@@ -614,9 +620,14 @@ export class CommonUtilService {
         this.toast = await this.toastController.create({
             duration: 3000,
             message: this.translateMessage(msg),
-            showCloseButton: true,
+            buttons: [
+                {
+                    text: 'X',
+                    role: 'cancel',
+                    handler: () => {}
+                }
+            ],
             position: 'top',
-            closeButtonText: 'X',
             cssClass: ['toastHeader', 'offline']
         });
         await this.toast.present();
@@ -668,17 +679,24 @@ export class CommonUtilService {
     }
 
     async handleAssessmentStatus(assessmentStatus) {
-        if (assessmentStatus.isContentDisabled) {
+        const maxAttempt: MaxAttempt = {
+            limitExceeded: false,
+            isCloseButtonClicked: false,
+            isLastAttempt: false
+        };
+        if (assessmentStatus && assessmentStatus.isContentDisabled) {
+            maxAttempt.limitExceeded = true;
             this.showToast('FRMELMNTS_IMSG_LASTATTMPTEXCD');
-            return true;
+            return maxAttempt;
         }
-        if (assessmentStatus.isLastAttempt) {
-            return await this.showAssessmentLastAttemptPopup();
+        if (assessmentStatus && assessmentStatus.isLastAttempt) {
+            maxAttempt.isLastAttempt = true;
+            return await this.showAssessmentLastAttemptPopup(maxAttempt);
         }
-        return false;
+        return maxAttempt;
     }
 
-    async showAssessmentLastAttemptPopup() {
+    async showAssessmentLastAttemptPopup(maxAttempt?: MaxAttempt) {
         const confirm = await this.popOverCtrl.create({
             component: SbPopoverComponent,
             componentProps: {
@@ -692,13 +710,26 @@ export class CommonUtilService {
                 ],
             },
             cssClass: 'sb-popover warning',
+            backdropDismiss: false
         });
         await confirm.present();
         const { data } = await confirm.onDidDismiss();
         if (data && data.canDelete) {
-            return false;
+            return maxAttempt;
+        } else {
+            maxAttempt.isCloseButtonClicked = true;
+            return maxAttempt;
         }
-        return true
     }
+
+    public async populateGlobalCData() {
+        const currentSelectedTabs = await this.preferences.getString(PreferenceKey.SELECTED_SWITCHABLE_TABS_CONFIG).toPromise();
+        const correlationData: CorrelationData = {
+        type : 'Tabs',
+        id: (!currentSelectedTabs || currentSelectedTabs === SwitchableTabsConfig.RESOURCE_COURSE_TABS_CONFIG )?
+        'Library-Course' : 'Home-Discover'
+        };
+        this.telemetryService.populateGlobalCorRelationData([correlationData]);
+      }
 
 }

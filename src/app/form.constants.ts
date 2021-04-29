@@ -42,4 +42,24 @@ export class FormConstants {
         action: 'get'
     };
 
+    public static  DEEPLINK_CONFIG: FormRequest = {
+        type: 'config',
+        subType: 'deeplink',
+        action: 'get'
+    };
+
+    public static  UTILITY_CONFIG: FormRequest = {
+        type: 'config',
+        subType: 'utility',
+        action: 'get',
+        component: 'app'
+    };
+
+    public static  VENDOR_APPS_CONFIG: FormRequest = {
+        type: 'config',
+        subType: 'vendorapps',
+        action: 'get',
+        component: 'app',
+    };
+
 }

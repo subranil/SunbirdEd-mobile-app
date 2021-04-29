@@ -1,5 +1,6 @@
 import { Component, OnInit, Inject, NgZone, ViewChild } from '@angular/core';
-import { Events, PopoverController } from '@ionic/angular';
+import { PopoverController } from '@ionic/angular';
+import { Events } from '@app/util/events';
 import { Router } from '@angular/router';
 import {
   Content,
@@ -52,7 +53,7 @@ export class DownloadManagerPage implements DownloadManagerPageInterface, OnInit
   sortCriteria: ContentSortCriteria[];
   storageDestination: any;
   private deletedContentListTitle$?: BehaviorSubject<string>;
-  @ViewChild('downloadsTab') downloadsTab: DownloadsTabComponent;
+  @ViewChild('downloadsTab', { static: false }) downloadsTab: DownloadsTabComponent;
 
   constructor(
     @Inject('CONTENT_SERVICE') private contentService: ContentService,

@@ -1,15 +1,16 @@
 import { Component, Inject, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { AppGlobalService, AppHeaderService, CommonUtilService, ContentAggregatorHandler, Environment,
   FormAndFrameworkUtilService, InteractSubtype, PageId, SunbirdQRScanner, TelemetryGeneratorService } from '@app/services';
-import { CourseCardGridTypes } from '@project-sunbird/common-consumption';
+import { CourseCardGridTypes } from '@project-sunbird/common-consumption-v8';
 import { NavigationExtras, Router } from '@angular/router';
-import { ContentFilterConfig, EventTopics, ProfileConstants, RouterLinks } from '../../app.constant';
+import { ContentFilterConfig, EventTopics, ProfileConstants, RouterLinks, ViewMore } from '../../app.constant';
 import { FrameworkService, FrameworkDetailsRequest, FrameworkCategoryCodesGroup, Framework,
     Profile, ProfileService, ContentAggregatorRequest, ContentSearchCriteria,
     CachedItemRequestSourceFrom, SearchType, InteractType } from '@project-sunbird/sunbird-sdk';
 import { AggregatorPageType } from '@app/services/content/content-aggregator-namespaces';
 import { NavigationService } from '@app/services/navigation-handler.service';
-import { Events, IonContent as ContentView  } from '@ionic/angular';
+import { IonContent as ContentView  } from '@ionic/angular';
+import { Events } from '@app/util/events';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -30,10 +31,11 @@ export class AdminHomePage implements OnInit, OnDestroy {
   profile: Profile;
   guestUser: boolean;
   appLabel: string;
+  newThemeTimeout: any;
 
   displaySections: any[] = [];
   headerObservable: Subscription;
-  @ViewChild('contentView') contentView: ContentView;
+  @ViewChild('contentView', { static: false }) contentView: ContentView;
 
   constructor(
     @Inject('FRAMEWORK_SERVICE') private frameworkService: FrameworkService,
@@ -99,6 +101,19 @@ export class AdminHomePage implements OnInit, OnDestroy {
     }
   }
 
+  ionViewDidLeave() {
+    if (this.newThemeTimeout && this.newThemeTimeout.clearTimeout) {
+      this.newThemeTimeout.clearTimeout();
+    }
+  }
+
+  ionViewDidEnter() {
+    // Need timer to load the coach screen and for the coach screen to hide if user comes from deeplink.
+    // this.newThemeTimeout = setTimeout(() => {
+    //   this.appGlobalService.showNewTabsSwitchPopup();
+    // }, 2000);
+  }
+
   getFrameworkDetails(): void {
     const frameworkDetailsRequest: FrameworkDetailsRequest = {
       frameworkId: (this.profile && this.profile.syllabus && this.profile.syllabus[0]) ? this.profile.syllabus[0] : '',
@@ -161,14 +176,13 @@ export class AdminHomePage implements OnInit, OnDestroy {
     }
   }
 
-  navigateToViewMoreContentsPage(section, pageName) {
+  navigateToViewMoreContentsPage(section) {
     const params: NavigationExtras = {
       state: {
-        requestParams: {
-          request: section.searchRequest
-        },
+        enrolledCourses: section.data.sections[0].contents,
+        pageName: ViewMore.PAGE_COURSE_ENROLLED,
         headerTitle: this.commonUtilService.getTranslatedValue(section.title, ''),
-        pageName
+        userId: this.appGlobalService.getUserId()
       }
     };
     this.router.navigate([RouterLinks.VIEW_MORE_ACTIVITY], params);

@@ -3,12 +3,12 @@
 
     <ion-buttons class="sb-hamburger" slot="start" *ngIf="headerConfig?.showBurgerMenu">
       <ion-button class="sb-hamburger-menu sb-hamburger-icon" icon-only (click)="toggleMenu()">
-        <img src="./assets/imgs/ic_burger_menu.png" class="tool-icon" alt="burger menu">
+        <img src="./assets/imgs/ic_burger_menu.svg" class="tool-icon" alt="burger menu">
       </ion-button>
     </ion-buttons>
     <ion-buttons class="sb-hamburger" slot="start" *ngIf="!headerConfig?.showBurgerMenu">
       <ion-button icon-only (click)="emitEvent($event, 'back');">
-        <ion-icon class="arrow-icon" ios="ios-arrow-back" md="md-arrow-back"></ion-icon>
+        <ion-icon class="arrow-icon" name="arrow-back"></ion-icon>
       </ion-button>
     </ion-buttons>
     <ion-title class="color f16" *ngIf="headerConfig?.pageTitle?.length >0">{{headerConfig?.pageTitle}}</ion-title>
@@ -47,7 +47,7 @@
       </ion-button>
       <ion-button icon-only *ngIf="headerConfig?.actionButtons?.indexOf('notification') >=0"
         (click)="emitEvent($event, 'notification');" class="active-download-icon">
-        <ion-icon md="md-notifications-outline" ios="ios-notifications-outline"></ion-icon>
+        <img src="assets/imgs/notification.svg" class="tool-icon" alt="notification">
         <ion-badge class="badge-container" *ngIf="unreadNotificationsCount">{{unreadNotificationsCount}}</ion-badge>
       </ion-button>
       <ion-button icon-only *ngIf="headerConfig?.actionButtons?.indexOf('search') >=0"
@@ -72,7 +72,7 @@
       </ion-button>
       <ion-button icon-only *ngIf="headerConfig?.actionButtons?.indexOf('share') >=0"
         (click)="emitEvent($event, 'share');">
-        <ion-icon md="md-share" class="ion-float-right"></ion-icon>
+        <ion-icon name="share" class="ion-float-right"></ion-icon>
       </ion-button>
       <ion-button icon-only *ngIf="headerConfig?.actionButtons?.indexOf('more') >=0"
         (click)="emitEvent($event, 'more');" style="font-size: 1.8rem;">
@@ -80,7 +80,11 @@
       </ion-button>
       <ion-button icon-only *ngIf="headerConfig?.actionButtons?.indexOf('groupInfo') >=0"
         (click)="emitEvent($event, 'groupInfo');" style="font-size: 1.8rem;">
-        <ion-icon class="ion-float-end" name="ios-information-circle-outline"></ion-icon>
+        <ion-icon class="ion-float-end" name="information-circle-outline"></ion-icon>
+      </ion-button>
+      <ion-button icon-only *ngIf="headerConfig?.showKebabMenu"
+                  (click)="showKebabMenu($event)" style="font-size: 1.8rem; padding: 0 16px;">
+        <img class="menu-icon" src="assets/imgs/menu.svg" alt="menu-icon">
       </ion-button>
     </ion-buttons>
 
@@ -166,6 +170,17 @@
         </span>
         <span *ngIf="appTheme === 'DEFAULT'" class="sb-menu-item" menuClose>{{SWITCH_TO_JOYFUL_THEME | translate}}</span>
         <span *ngIf="appTheme === 'JOYFUL'" class="sb-menu-item" menuClose>{{SWITCH_TO_CLASSIC_THEME | translate}}</span>
+        <div class="new-feature-badge">
+          <div class="square-badge">New</div>
+          <div class="circle-badge"></div>
+        </div>
+      </ion-item>
+
+      <ion-item (click)="emitSideMenuItemEvent($event, 'IMPORT')">
+        <span class="sb-menu-icon">
+          <img src="./assets/imgs/ic_import.png" class="tool-icon" alt="import">
+        </span>
+        <span class="sb-menu-item" menuClose>{{'IMPORT_CONTENT' | translate}}</span>
         <div class="new-feature-badge">
           <div class="square-badge">New</div>
           <div class="circle-badge"></div>
@@ -286,12 +301,35 @@
         </div>
       </ion-item>
 
-      <ion-item (click)="switchTheme()">
+      <!-- <ion-item (click)="switchTheme()">
         <span class="sb-menu-icon">
           <img src="./assets/imgs/ic_switch.svg" class="tool-icon sb-menu-item-switch" alt="help">
         </span>
         <span *ngIf="appTheme === 'DEFAULT'" class="sb-menu-item" menuClose>{{'SWITCH_TO_JOYFUL_THEME' | translate}}</span>
         <span *ngIf="appTheme === 'JOYFUL'" class="sb-menu-item" menuClose>{{'SWITCH_TO_CLASSIC_THEME' | translate}}</span>
+        <div class="new-feature-badge">
+          <div class="square-badge">New</div>
+          <div class="circle-badge"></div>
+        </div>
+      </ion-item> -->
+      <ion-item (click)="switchTabs()">
+        <div class="beta-info">
+          <span class="sb-menu-icon">
+            <img src="./assets/imgs/ic_switch.svg" class="tool-icon sb-menu-item-switch" alt="help">
+          </span>
+          <div><span *ngIf="currentSelectedTabs === 'HOME_DISCOVER_TABS_CONFIG'" class="sb-menu-item" menuClose>{{'FRMELEMNTS_LBL_SWITCH_TO_LIBRARY' | translate: {'appName': appName} }}</span>
+            <span *ngIf="!currentSelectedTabs || currentSelectedTabs === 'RESOURCE_COURSE_TABS_CONFIG'" class="sb-menu-item" menuClose>{{'FRMELEMNTS_LBL_SWITCH_TO_HOME' | translate: {'appName': appName} }}</span>
+              <span class="new-feature-badge" *ngIf="!currentSelectedTabs || currentSelectedTabs === 'RESOURCE_COURSE_TABS_CONFIG'" >
+              <div class="square-badge">Beta</div>
+              <div class="circle-badge"></div></span></div>
+        </div>
+      </ion-item>
+
+      <ion-item (click)="emitSideMenuItemEvent($event, 'IMPORT')">
+        <span class="sb-menu-icon">
+          <img src="./assets/imgs/ic_import.png" class="tool-icon" alt="import">
+        </span>
+        <span class="sb-menu-item" menuClose>{{'IMPORT_CONTENT' | translate}}</span>
         <div class="new-feature-badge">
           <div class="square-badge">New</div>
           <div class="circle-badge"></div>

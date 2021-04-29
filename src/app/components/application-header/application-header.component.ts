@@ -1,32 +1,34 @@
 import {
   ChangeDetectorRef, Component, EventEmitter,
-  Inject, Input, OnInit, Output, OnDestroy, NgZone
+  Inject, Input, NgZone, OnDestroy, OnInit, Output
 } from '@angular/core';
-import { Events, MenuController, Platform, PopoverController } from '@ionic/angular';
+import { NavigationExtras, Router } from '@angular/router';
+import { ApplicationHeaderKebabMenuComponent } from '@app/app/components/application-header/application-header-kebab-menu.component';
+import { TncUpdateHandlerService } from '@app/services/handlers/tnc-update-handler.service';
+import { AppVersion } from '@ionic-native/app-version/ngx';
+import { MenuController, Platform, PopoverController } from '@ionic/angular';
+import { Events } from '@app/util/events';
+import { TranslateService } from '@ngx-translate/core';
+import { combineLatest, EMPTY, Observable, Subscription } from 'rxjs';
+import { filter, map } from 'rxjs/operators';
 import {
-  AppGlobalService, UtilityService, CommonUtilService,
-  NotificationService, TelemetryGeneratorService,
-  InteractType, InteractSubtype, Environment,
-  ActivePageService, ID, CorReleationDataType, AppHeaderService
-} from '../../../services';
-import {
-  DownloadService, SharedPreferences
-  , NotificationService as PushNotificationService, NotificationStatus,
-  EventNamespace, DownloadProgress, DownloadEventType, EventsBusService,
-  ProfileService, Profile, CachedItemRequestSourceFrom,
-  ServerProfile, CorrelationData
+  CachedItemRequestSourceFrom,
+  CorrelationData, DownloadEventType, DownloadProgress, DownloadService,
+  EventNamespace, EventsBusService, NotificationService as PushNotificationService, NotificationStatus,
+  Profile, ProfileService,
+  ServerProfile, SharedPreferences
 } from 'sunbird-sdk';
 import {
-  GenericAppConfig, PreferenceKey,
-  EventTopics, ProfileConstants, RouterLinks, AppThemes
+  AppThemes, EventTopics, GenericAppConfig, PreferenceKey,
+  ProfileConstants, RouterLinks, SwitchableTabsConfig
 } from '../../../app/app.constant';
-import { AppVersion } from '@ionic-native/app-version/ngx';
-import { Subscription, combineLatest, Observable, EMPTY, interval } from 'rxjs';
-import { TranslateService } from '@ngx-translate/core';
-import { NavigationExtras, Router } from '@angular/router';
-import { filter, map } from 'rxjs/operators';
+import {
+  ActivePageService, AppGlobalService,
+  AppHeaderService, CommonUtilService,
+  CorReleationDataType, Environment,
+  ID, InteractSubtype, InteractType, NotificationService, PageId, TelemetryGeneratorService, UtilityService
+} from '../../../services';
 import { ToastNavigationComponent } from '../popups/toast-navigation/toast-navigation.component';
-import { TncUpdateHandlerService } from '@app/services/handlers/tnc-update-handler.service';
 
 declare const cordova;
 
@@ -60,6 +62,7 @@ export class ApplicationHeaderComponent implements OnInit, OnDestroy {
   appTheme = AppThemes.DEFAULT;
   unreadNotificationsCount = 0;
   isUpdateAvailable = false;
+  currentSelectedTabs: string;
   constructor(
     @Inject('SHARED_PREFERENCES') private preference: SharedPreferences,
     @Inject('DOWNLOAD_SERVICE') private downloadService: DownloadService,
@@ -212,7 +215,7 @@ export class ApplicationHeaderComponent implements OnInit, OnDestroy {
     }
   }
 
-  toggleMenu() {
+  async toggleMenu() {
     this.menuCtrl.toggle();
     if (this.menuCtrl.isOpen()) {
       const pageId = this.activePageService.computePageId(this.router.url);
@@ -224,6 +227,8 @@ export class ApplicationHeaderComponent implements OnInit, OnDestroy {
       );
     }
     this.events.publish(EventTopics.HAMBURGER_MENU_CLICKED);
+    // this.appTheme = document.querySelector('html').getAttribute('data-theme');
+    this.currentSelectedTabs = await this.preference.getString(PreferenceKey.SELECTED_SWITCHABLE_TABS_CONFIG).toPromise();
   }
 
   emitEvent($event, name) {
@@ -398,14 +403,59 @@ export class ApplicationHeaderComponent implements OnInit, OnDestroy {
     this.menuCtrl.close();
   }
 
+  async switchTabs() {
+    this.currentSelectedTabs = await this.preference.getString(PreferenceKey.SELECTED_SWITCHABLE_TABS_CONFIG).toPromise();
+    let subType = InteractSubtype.OPTED_IN;
+    if (this.currentSelectedTabs === SwitchableTabsConfig.HOME_DISCOVER_TABS_CONFIG) {
+      this.preference.putString(PreferenceKey.SELECTED_SWITCHABLE_TABS_CONFIG,
+        SwitchableTabsConfig.RESOURCE_COURSE_TABS_CONFIG).toPromise();
+      this.events.publish('UPDATE_TABS', { type: 'SWITCH_TABS_USERTYPE' });
+      subType = InteractSubtype.OPTED_OUT;
+    } else if (!this.currentSelectedTabs || this.currentSelectedTabs === SwitchableTabsConfig.RESOURCE_COURSE_TABS_CONFIG) {
+      this.preference.putString(PreferenceKey.SELECTED_SWITCHABLE_TABS_CONFIG,
+        SwitchableTabsConfig.HOME_DISCOVER_TABS_CONFIG).toPromise();
+      this.events.publish('UPDATE_TABS', { type: 'SWITCH_TABS_USERTYPE' });
+      subType = InteractSubtype.OPTED_IN;
+    }
+    const userType = await this.preference.getString(PreferenceKey.SELECTED_USER_TYPE).toPromise();
+    const isNewUser = await this.preference.getBoolean(PreferenceKey.IS_NEW_USER).toPromise();
+    this.telemetryGeneratorService.generateNewExprienceSwitchTelemetry(
+      PageId.MENU,
+      subType,
+        {
+            userType,
+            isNewUser
+        }
+    );
+    await this.commonUtilService.populateGlobalCData();
+    this.menuCtrl.close();
+  }
+
   private async checkForAppUpdate() {
-      return new Promise((resolve => {
-          cordova.plugins.InAppUpdateManager.isUpdateAvailable((result: string) => {
-              if (result) {
-                  this.isUpdateAvailable = true;
-                  resolve();
-              }
-          }, () => {});
-      }));
+    return new Promise((resolve => {
+      cordova.plugins.InAppUpdateManager.isUpdateAvailable((result: string) => {
+        if (result) {
+          this.isUpdateAvailable = true;
+          resolve();
+        }
+      }, () => { });
+    }));
+  }
+
+  async showKebabMenu(event) {
+    const kebabMenuPopover = await this.popoverCtrl.create({
+      component: ApplicationHeaderKebabMenuComponent,
+      event,
+      showBackdrop: false,
+      componentProps: {
+        options: this.headerConfig.kebabMenuOptions || []
+      },
+    });
+    kebabMenuPopover.present();
+    const { data } = await kebabMenuPopover.onDidDismiss();
+    if (!data) {
+      return;
+    }
+    this.emitEvent({ event, option: data.option }, 'kebabMenu');
   }
 }

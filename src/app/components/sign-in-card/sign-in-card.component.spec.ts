@@ -4,7 +4,8 @@ import {
     CommonUtilService, AppGlobalService, TelemetryGeneratorService,
     ContainerService, FormAndFrameworkUtilService
 } from '../../../services';
-import {NavController, Events} from '@ionic/angular';
+import {NavController} from '@ionic/angular';
+import {Events} from '@app/util/events';
 import {NgZone} from '@angular/core';
 import {AppVersion} from '@ionic-native/app-version/ngx';
 import {of, throwError} from 'rxjs';
@@ -109,7 +110,9 @@ describe('SignInCardComponent', () => {
                 handle: 'sample_name',
                 profileType: ProfileType.TEACHER,
                 source: ProfileSource.SERVER,
-                userType: 'OTHER',
+                profileUserType: {
+                    type: 'OTHER'
+                },
                 serverProfile: {
                     uid: 'sample_id',
                     handle: 'sample_name',
@@ -189,7 +192,9 @@ describe('SignInCardComponent', () => {
                 handle: 'sample_name',
                 profileType: ProfileType.TEACHER,
                 source: ProfileSource.SERVER,
-                userType: 'Teacher',
+                profileUserType: {
+                    type: 'Teacher'
+                },
                 serverProfile: {
                     uid: 'sample_id',
                     handle: 'sample_name',
@@ -425,7 +430,9 @@ describe('SignInCardComponent', () => {
                 handle: 'sample_name',
                 profileType: ProfileType.TEACHER,
                 source: ProfileSource.SERVER,
-                userType: 'Teacher',
+                profileUserType: {
+                    type: 'OTHER'
+                },
                 serverProfile: {
                     uid: 'sample_id',
                     handle: 'sample_name',
