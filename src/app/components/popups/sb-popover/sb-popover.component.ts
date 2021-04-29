@@ -14,6 +14,7 @@ export class SbPopoverComponent implements OnDestroy {
   sbPopoverMainTitle: any;
   sbPopoverContent: any;
   sbPopoverHtmlContent?: string;
+  sbPopoverInfo: any;
   actionsButtons: any;
   icon: any;
   metaInfo: any;
@@ -27,6 +28,8 @@ export class SbPopoverComponent implements OnDestroy {
   pageName = '';
   showFlagMenu = true;
   img: any;
+  disableDeviceBackButton: boolean;
+  showCloseBtn = true;
   public objRollup: Rollup;
 
   public corRelationList: Array<CorrelationData>;
@@ -35,6 +38,7 @@ export class SbPopoverComponent implements OnDestroy {
   public sbPopoverDynamicContent$?: Observable<string>;
   public sbPopoverDynamicContentSubscription?: Subscription;
   public sbPopoverDynamicButtonDisabledSubscription?: Subscription;
+
   constructor(
     public navParams: NavParams,
     private platform: Platform,
@@ -50,6 +54,9 @@ export class SbPopoverComponent implements OnDestroy {
     this.sbPopoverHtmlContent = this.navParams.get('sbPopoverHtmlContent');
     this.sbPopoverHeading = this.navParams.get('sbPopoverHeading');
     this.sbPopoverMainTitle = this.navParams.get('sbPopoverMainTitle');
+    this.showCloseBtn = this.navParams.get('showCloseBtn');
+    this.sbPopoverInfo = this.navParams.get('sbPopoverInfo');
+
 
     this.content = this.navParams.get('content');
     this.data = this.navParams.get('data');
@@ -58,6 +65,7 @@ export class SbPopoverComponent implements OnDestroy {
     this.objRollup = this.navParams.get('objRollup');
     this.corRelationList = this.navParams.get('corRelationList');
     this.img = this.navParams.get('img');
+    this.disableDeviceBackButton = this.navParams.get('disableDeviceBackButton');
 
     // Dynamic
     this.sbPopoverDynamicMainTitle$ = this.navParams.get('sbPopoverDynamicMainTitle');
@@ -107,6 +115,9 @@ export class SbPopoverComponent implements OnDestroy {
 
   ionViewWillEnter() {
     this.backButtonFunc = this.platform.backButton.subscribeWithPriority(11, () => {
+      if (this.disableDeviceBackButton) {
+        return;
+      }
       this.popoverCtrl.dismiss();
       this.backButtonFunc.unsubscribe();
     });

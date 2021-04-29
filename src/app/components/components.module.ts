@@ -3,19 +3,16 @@ import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { IonicModule } from '@ionic/angular';
 import { TranslateModule } from '@ngx-translate/core';
-
 import { ApplicationHeaderComponent } from './application-header/application-header.component';
 import { SignInCardComponent } from './sign-in-card/sign-in-card.component';
-import { TextBookCardComponent } from './text-book-card/text-book-card.component';
 import { PipesModule } from '../../pipes/pipes.module';
-import { ViewAllCardComponent } from './view-all-card/view-all-card.component';
 import { PbHorizontalComponent } from './pb-horizontal/pb-horizontal.component';
 import { SbGenericPopoverComponent } from './popups/sb-generic-popover/sb-generic-popover.component';
 import { SbNoNetworkPopupComponent } from './popups/sb-no-network-popup/sb-no-network-popup.component';
 import { SbPopoverComponent } from './popups/sb-popover/sb-popover.component';
 import { CollectionChildComponent } from './collection-child/collection-child.component';
 import { ContentActionsComponent } from './content-actions/content-actions.component';
-import { IonicRatingModule, RatingComponent } from 'ionic4-rating';
+import { IonicRatingModule } from 'ionic4-rating';
 import { ContentRatingAlertComponent } from './content-rating-alert/content-rating-alert.component';
 import { DetailCardComponent } from './detail-card/detail-card.component';
 import { FileSizePipe } from '@app/pipes/file-size/file-size';
@@ -28,10 +25,8 @@ import { Keyboard } from '@ionic-native/keyboard/ngx';
 import { ConfirmAlertComponent } from './confirm-alert/confirm-alert.component';
 import { AppRatingAlertComponent } from './rating-alert/rating-alert.component';
 import { OverflowMenuComponent } from '../profile/overflow-menu/overflow-menu.component';
-import { ReportAlertComponent } from '../reports/report-alert/report-alert.component';
 import { ProfileAvatarComponent } from './profile-avatar/profile-avatar.component';
 import { NotificationItemComponent } from './notification-item/notification-item.component';
-import { AssessmentDetailsComponent } from './assessment-details/assessment-details.component';
 import { ViewCreditsComponent } from './popups/view-credits/view-credits.component';
 import { SkeletonItemComponent } from './skeleton-item/skeleton-item.component';
 import { FilteroptionComponent } from './filteroption/filteroption.component';
@@ -42,15 +37,32 @@ import { FilterPipe } from '@app/pipes/filter/filter.pipe';
 import { TeacherIdVerificationComponent } from './popups/teacher-id-verification-popup/teacher-id-verification-popup.component';
 import { SbSharePopupComponent } from './popups/sb-share-popup/sb-share-popup.component';
 import { SbAppSharePopupComponent } from './popups/sb-app-share-popup/sb-app-share-popup.component';
-import {ImportPopoverComponent} from './popups/import-popover/import-popover.component';
-import {SbTutorialPopupComponent} from './popups/sb-tutorial-popup/sb-tutorial-popup.component';
+import { ImportPopoverComponent } from './popups/import-popover/import-popover.component';
+import { SbProgressLoaderPage } from '@app/app/components/popups/sb-progress-loader/sb-progress-loader.page';
+import { CollectionActionsComponent } from './collection-acions/collection-acions.component';
+import { MyGroupsPopoverComponent } from './popups/sb-my-groups-popover/sb-my-groups-popover.component';
+import { CommonConsumptionModule } from '@project-sunbird/common-consumption';
+import { ToastNavigationComponent } from './popups/toast-navigation/toast-navigation.component';
+import { CommonFormsComponent } from './common-forms/common-forms.component';
+import { SbTutorialPopupComponent } from './popups/sb-tutorial-popup/sb-tutorial-popup.component';
+import { SbGenericFormPopoverComponent } from './popups/sb-generic-form-popover/sb-generic-form-popover.component';
+import { CourseCompletionPopoverComponent } from './popups/sb-course-completion-popup/sb-course-completion-popup.component';
+import { SupportAcknowledgement } from './support-acknowledgement/support-acknowledgement.component';
+import { AcknowledgeResponseComponent } from './acknowledge-response/acknowledge-response.component';
+import { ExploreBooksSortComponent } from '../resources/explore-books-sort/explore-books-sort.component';
+import { AddActivityToGroupComponent } from './add-activity-to-group/add-activity-to-group.component';
+import { ConsentPiiPopupComponent } from './popups/consent-pii-popup/consent-pii-popup.component';
+import { LicenseCardComponentComponent } from '@app/app/components/license-card-component/license-card-component.component';
+import { GroupGuideLinesPopoverComponent } from './popups/group-guidelines-popup/group-guidelines-popup.component';
+import {
+  ProfileNameConfirmationPopoverComponent
+} from './popups/sb-profile-name-confirmation-popup/sb-profile-name-confirmation-popup.component';
+import { CopyTraceIdPopoverComponent } from './popups/copy-trace-id-popup.ts/copy-trace-id-popup.component';
 
 @NgModule({
   declarations: [
     ApplicationHeaderComponent,
     SignInCardComponent,
-    TextBookCardComponent,
-    ViewAllCardComponent,
     PbHorizontalComponent,
     SbGenericPopoverComponent,
     SbPopoverComponent,
@@ -67,10 +79,8 @@ import {SbTutorialPopupComponent} from './popups/sb-tutorial-popup/sb-tutorial-p
     ConfirmAlertComponent,
     AppRatingAlertComponent,
     OverflowMenuComponent,
-    ReportAlertComponent,
     ProfileAvatarComponent,
     NotificationItemComponent,
-    AssessmentDetailsComponent,
     ViewCreditsComponent,
     SkeletonItemComponent,
     FilteroptionComponent,
@@ -81,7 +91,23 @@ import {SbTutorialPopupComponent} from './popups/sb-tutorial-popup/sb-tutorial-p
     SbSharePopupComponent,
     SbAppSharePopupComponent,
     ImportPopoverComponent,
-    SbTutorialPopupComponent
+    SbProgressLoaderPage,
+    CollectionActionsComponent,
+    MyGroupsPopoverComponent,
+    ToastNavigationComponent,
+    CommonFormsComponent,
+    SbTutorialPopupComponent,
+    SbGenericFormPopoverComponent,
+    CourseCompletionPopoverComponent,
+    SupportAcknowledgement,
+    AcknowledgeResponseComponent,
+    ExploreBooksSortComponent,
+    AddActivityToGroupComponent,
+    ConsentPiiPopupComponent,
+    LicenseCardComponentComponent,
+    GroupGuideLinesPopoverComponent,
+    ProfileNameConfirmationPopoverComponent,
+    CopyTraceIdPopoverComponent
   ],
   imports: [
     CommonModule,
@@ -90,6 +116,7 @@ import {SbTutorialPopupComponent} from './popups/sb-tutorial-popup/sb-tutorial-p
     IonicModule,
     ReactiveFormsModule,
     PipesModule,
+    CommonConsumptionModule,
     IonicRatingModule,
     TranslateModule.forChild(),
   ],
@@ -109,7 +136,6 @@ import {SbTutorialPopupComponent} from './popups/sb-tutorial-popup/sb-tutorial-p
     ViewCreditsComponent,
     FilteroptionComponent,
     ContentActionsComponent,
-    ReportAlertComponent,
     SbInsufficientStoragePopupComponent,
     AccountRecoveryInfoComponent,
     EnrollmentDetailsComponent,
@@ -117,13 +143,25 @@ import {SbTutorialPopupComponent} from './popups/sb-tutorial-popup/sb-tutorial-p
     SbSharePopupComponent,
     SbAppSharePopupComponent,
     ImportPopoverComponent,
-    SbTutorialPopupComponent
+    SbProgressLoaderPage,
+    CollectionActionsComponent,
+    MyGroupsPopoverComponent,
+    ToastNavigationComponent,
+    CommonFormsComponent,
+    SbTutorialPopupComponent,
+    SbGenericFormPopoverComponent,
+    CourseCompletionPopoverComponent,
+    SupportAcknowledgement,
+    AcknowledgeResponseComponent,
+    ExploreBooksSortComponent,
+    ConsentPiiPopupComponent,
+    GroupGuideLinesPopoverComponent,
+    ProfileNameConfirmationPopoverComponent,
+    CopyTraceIdPopoverComponent
   ],
   exports: [
     ApplicationHeaderComponent,
     SignInCardComponent,
-    TextBookCardComponent,
-    ViewAllCardComponent,
     PbHorizontalComponent,
     SbGenericPopoverComponent,
     SbPopoverComponent,
@@ -141,11 +179,9 @@ import {SbTutorialPopupComponent} from './popups/sb-tutorial-popup/sb-tutorial-p
     AppRatingAlertComponent,
     ProfileAvatarComponent,
     NotificationItemComponent,
-    AssessmentDetailsComponent,
     ViewCreditsComponent,
     SkeletonItemComponent,
     FilteroptionComponent,
-    ReportAlertComponent,
     SbInsufficientStoragePopupComponent,
     AccountRecoveryInfoComponent,
     EnrollmentDetailsComponent,
@@ -153,8 +189,24 @@ import {SbTutorialPopupComponent} from './popups/sb-tutorial-popup/sb-tutorial-p
     SbSharePopupComponent,
     SbAppSharePopupComponent,
     ImportPopoverComponent,
-    SbTutorialPopupComponent
+    SbProgressLoaderPage,
+    CollectionActionsComponent,
+    MyGroupsPopoverComponent,
+    ToastNavigationComponent,
+    CommonFormsComponent,
+    SbTutorialPopupComponent,
+    SbGenericFormPopoverComponent,
+    CourseCompletionPopoverComponent,
+    SupportAcknowledgement,
+    AcknowledgeResponseComponent,
+    ExploreBooksSortComponent,
+    AddActivityToGroupComponent,
+    ConsentPiiPopupComponent,
+    LicenseCardComponentComponent,
+    GroupGuideLinesPopoverComponent,
+    ProfileNameConfirmationPopoverComponent,
+    CopyTraceIdPopoverComponent
   ],
-  providers: [FileSizePipe, FilterPipe,  Keyboard]
+  providers: [FileSizePipe, FilterPipe, Keyboard]
 })
 export class ComponentsModule { }

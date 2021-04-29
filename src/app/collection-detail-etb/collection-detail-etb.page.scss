@@ -17,11 +17,11 @@
   font-weight: bold;
   line-height: 19px;
   text-align: center;
-  color: #666666;
+  color: map-get($colors, granite_gray);
 }
 
 .sub-heading {
-  color: #666666;
+  color: map-get($colors, granite_gray);
   font-size: 12px;
   line-height: 17px;
   text-align: center;
@@ -72,7 +72,7 @@
     padding-bottom: 16px;
   }
 
-  background-color: #ffffff;
+  background-color: map-get($colors, white);
   height: 100%;
   z-index: 1000;
   opacity: 1 !important;
@@ -87,7 +87,7 @@ ion-card {
 }
 
 ion-card .card .card-md {
-  margin: 0px;
+  margin: 0;
 }
 
 .M0 {
@@ -95,7 +95,7 @@ ion-card .card .card-md {
 }
 
 .P15 {
-  padding: 15 !important;
+  padding: 15px !important;
 }
 
 .M5 {
@@ -131,8 +131,8 @@ ion-card .card .card-md {
 }
 
 .MLR0 {
-  margin-left: 0px !important;
-  margin-right: 0px !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 
 .ML20 {
@@ -160,27 +160,27 @@ ion-card .card .card-md {
 }
 
 .yellow-gold {
-  color: #f8e71c;
+  color: map-get($colors, bright_yellow);
 }
 
 .font-blue {
-  color: #024f9d;
+  color: $blue;
   font-size: 30px;
 }
 
 .text-selected {
   padding: 4px;
-  color: #024f9d;
+  color: $blue;
   font-weight: bolder;
 }
 
 .text-unselected {
   padding: 4px;
-  color: #0a5cad;
+  color: map-get($colors, bright_blue);
 }
 
 .play-icon {
-  color: #00ba75;
+  color: map-get($colors, vivid_green);
   font-size: 30px;
 }
 
@@ -190,7 +190,7 @@ ion-card .card .card-md {
 
 .view-credits {
   span {
-    color: #024F9D;
+    color: $blue;
 
     ion-icon {
       padding: 0 0 4px 8px;
@@ -204,15 +204,15 @@ ion-card .card .card-md {
 
 .credit-label-padding {
   padding: 14px 14px 8px 14px;
-  background-color: #f2f2f2;
+  background-color: map-get($colors, white_f2);
 }
 
 .content-padding {
-  padding: 8px 8px 0px 8px;
+  padding: 8px 8px 0 8px;
 }
 
 .subtitle-color {
-  color: map-get($colors, textGrey);
+  color: map-get($colors, granite_gray);
 }
 
 .label-margin-bottom {
@@ -220,7 +220,7 @@ ion-card .card .card-md {
 }
 
 .traning-derived-label-background {
-  background-color: #f2f2f2;
+  background-color: map-get($colors, white_f2);
   padding: 8px 0px 8px 15px;
 }
 
@@ -241,38 +241,25 @@ ion-card .card .card-md {
 }
 
 .checkmark-icon {
-  color: #00ba75;
+  color: map-get($colors, vivid_green);
   font-size: 18px;
   margin-left: 5px;
 }
 
 .font-blue-text {
   padding: 4px;
-  color: #024f9d;
+  color: $blue;
 }
 
 .font-grey-text {
   //  padding: 4px;
-  color: #979797;
+  color: map-get($colors, dark_gray);
 }
 
 .grey-icon {
-  color: #979797;
+  color: map-get($colors, dark_gray);
   font-size: ($font-size-base + 4);
 }
-
-$newColors: (primary:#024f9d,
-  primary-light: #90c7ff,
-  secondary: #90c7ff,
-  secondary-light: #979797,
-  light-black: #515151,
-  light-grey: #979797,
-  white: #fff,
-  danger: #e55a28,
-  dark-danger:#db4437,
-  success: #008840,
-  yellow-gold: #f8e71c,
-  light-blue: #7fa3ff);
 
 .horizontal-scroll {
   display: flex;
@@ -282,7 +269,7 @@ $newColors: (primary:#024f9d,
 .separator-dot {
   width: 4px;
   height: 4px;
-  background-color: #d8d8d8;
+  background-color: map-get($colors, light_silver);
   border-radius: 50%;
   display: inline-block;
   vertical-align: middle;
@@ -291,49 +278,40 @@ $newColors: (primary:#024f9d,
 .separator-line {
   height: 1px;
   opacity: 0.36;
-  background-color: #979797;
+  background-color: map-get($colors, dark_gray);
   width: 100%;
 }
 
 .white {
-  color: map-get($newColors, white);
-}
-
-.yellow-gold {
-  color: map-get($newColors, yellow-gold)
+  color: map-get($colors, white);
 }
 
 .light-black {
-  color: map-get($newColors, light-black);
+  color: map-get($colors, light_black_51);
 }
 
 .bg-white {
-  background-color: #fff;
+  background-color: map-get($colors, white);
 }
 
 .bg-sucess {
-  background-color: map-get($newColors, success);
+  background-color: $green;
 }
 
 .bg-primary {
-  background-color: map-get($newColors, primary);
+  background-color: $blue;
 }
 
 .bg-danger {
-  background-color: map-get($newColors, danger);
+  background-color: $orange;
 }
 
 .bg-dark-danger {
-  background-color: map-get($newColors, dark-danger);
+  background-color: $red;
 }
 
 .danger {
-  color: map-get($newColors, danger);
-}
-
-shadow {
-  margin: none;
-  box-shadow: 0 3px 5px 4px rgba(0, 0, 0, 0.05);
+  color: $orange;
 }
 
 //  Details card
@@ -353,7 +331,7 @@ shadow {
       grid-template-columns: 1fr;
       margin-right: 5px;
       padding: 10px;
-      font-size: 2 rem;
+      font-size: 2rem;
 
       .item {
         flex: 1 1 auto;
@@ -365,7 +343,6 @@ shadow {
 
     .left {
       overflow: hidden;
-      display: grid;
       grid-template-columns: 1fr;
       display: flex;
       flex-direction: column;
@@ -401,7 +378,7 @@ shadow {
       grid-template-columns: 1fr;
       margin-right: 5px;
       padding: 10px;
-      font-size: 2 rem;
+      font-size: 2rem;
     }
 
     .right {
@@ -421,7 +398,6 @@ shadow {
 
     .left {
       overflow: hidden;
-      display: grid;
       grid-template-columns: 1fr;
       display: flex;
       flex-direction: column;
@@ -441,15 +417,14 @@ shadow {
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
-        margin: 0;
-        margin-bottom: 3px;
+        margin: 0 0 3px;
         padding: 0;
         font-weight: 500;
         font-style: normal;
         font-stretch: normal;
         line-height: normal;
         letter-spacing: -0.4px;
-        color: #333333;
+        color: map-get($colors, primary_black);
         height: 42px;
       }
 
@@ -460,7 +435,7 @@ shadow {
         font-stretch: normal;
         line-height: normal;
         letter-spacing: -0.4px;
-        color: #979797;
+        color: map-get($colors, dark_gray);
       }
     }
 
@@ -534,205 +509,12 @@ shadow {
   width: 100%;
 }
 
-.details-card {
-  border-radius: 2px;
-  box-shadow: 0 3px 5px 4px rgba(0, 0, 0, 0.05);
-  background-color: map-get($colors, white);
-
-  .content-unit {
-    display: grid;
-    //grid-gap: 13px;
-    grid-template-columns: 3fr .4fr;
-
-    .pull-right {
-      overflow: hidden;
-      display: grid;
-      grid-template-columns: 1fr;
-      margin-right: 5px;
-      padding: 10px;
-      font-size: 2rem;
-
-      .item {
-        flex: 1 1 auto;
-        justify-content: right;
-        align-items: center;
-        display: flex;
-      }
-    }
-
-    .left {
-      overflow: hidden;
-      display: grid;
-      grid-template-columns: 1fr;
-      display: flex;
-      flex-direction: column;
-      @include padding(15px, 0, 15px, 15px);
-
-      .item {
-        flex: 1 1 auto;
-        justify-content: left;
-        align-items: center;
-        display: flex;
-      }
-    }
-  }
-
-  .W-88 {
-    width: 88px;
-  }
-
-  .rating {
-    display: flex;
-    justify-content: flex-end;
-    align-items: end;
-  }
-
-  .content {
-    display: grid;
-    //grid-gap: 13px;
-    grid-template-columns: 2.9fr 1fr;
-
-    .pull-right {
-      overflow: hidden;
-      display: grid;
-      grid-template-columns: 1fr;
-      margin-right: 5px;
-      padding: 10px;
-      font-size: 2rem;
-    }
-
-    .right {
-      overflow: hidden;
-      display: grid;
-      grid-template-columns: 1fr;
-      padding: 15px;
-
-      //grid-template-rows: 1fr;
-      .img-container {
-        // background-color: grey;
-        width: 100%;
-        min-height: 54px;
-        max-height: 54px;
-      }
-    }
-
-    .left {
-      overflow: hidden;
-      display: grid;
-      grid-template-columns: 1fr;
-      display: flex;
-      flex-direction: column;
-      @include padding(15px, 0, 15px, 15px);
-
-      .item {
-        flex: 1 1 auto;
-        justify-content: left;
-        align-items: center;
-        display: flex;
-      }
-
-      .title {
-        width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        margin: 0;
-        margin-bottom: 3px;
-        padding: 0;
-        font-weight: 500;
-        font-style: normal;
-        font-stretch: normal;
-        line-height: normal;
-        letter-spacing: -0.4px;
-        color: #333333;
-        height: 42px;
-      }
-
-      .info {
-        font-size: 12px;
-        font-weight: 500;
-        font-style: normal;
-        font-stretch: normal;
-        line-height: normal;
-        letter-spacing: -0.4px;
-        color: #979797;
-      }
-    }
-
-    &.single-column {
-      display: grid;
-      grid-template-columns: 1fr;
-
-      .left {
-        @include padding(15px);
-      }
-
-      .tag {
-        border-radius: 2px;
-        @include padding(3px, 7px);
-        color: map-get($colors, light-blue);
-        font-size: 10px;
-        font-weight: normal;
-        font-style: normal;
-        font-stretch: normal;
-        line-height: 1.1;
-        letter-spacing: -0.4px;
-        border: 1px solid map-get($colors, light-blue);
-        display: inline-flex;
-
-        &:not(:last-child) {
-          @include margin(null, 10px, null, null);
-        }
-      }
-    }
-
-  }
-
-  .btn-caption-container {
-    display: inline-grid;
-    grid-template-columns: 1fr;
-    @include margin(null, 20px, null, null);
-
-    &:last-child {
-      @include margin(null, 0, null, null);
-    }
-
-    .btn-caption {
-      color: map-get($colors, secondary-light);
-      text-transform: capitalize;
-      font-weight: 500;
-      font-style: normal;
-      font-stretch: normal;
-      line-height: normal;
-      letter-spacing: -0.3px;
-      display: inline-block;
-      text-align: center;
-    }
-
-    .action-btn {
-      height: auto;
-
-      ion-icon {
-        line-height: 30px;
-
-      }
-
-    }
-  }
-}
-
-.scroll-content {
-  padding-bottom: 20% !important;
-}
-
 .sb-topics-containe {
   padding-right: 5%;
 }
 
 .sb-hidden-content {
-  background-color: #F2F2F2;
+  background-color: map-get($colors, white_f2);
   height: 34.15%;
   width: 100%;
   border-radius: 0 0 2px 2px;
@@ -744,7 +526,7 @@ shadow {
   height: 6.1%;
   width: 100%;
   border-radius: 2px;
-  background-color: #FFFFFF;
+  background-color: map-get($colors, white);
   box-shadow: 0 4px 7px 0 rgba(0, 0, 0, 0.1);
 }
 
@@ -771,7 +553,7 @@ shadow {
   @include clearfix;
   color: $blue;
   padding: $base-block-space;
-  background-color: #fff;
+  background-color: map-get($colors, white);
 
   .pull-left {
     line-height: 30px;
@@ -782,7 +564,7 @@ shadow {
     width: 24px;
     border-radius: 12px;
     font-size: 28px;
-    color: #7EAEDE;
+    color: map-get($colors, light-blue);
   }
 }
 
@@ -809,5 +591,16 @@ shadow {
 
   .sb-collection-child-ftue {
     margin-left: 8px;
+  }
+}
+
+.drop-arrow{
+  border-radius: 50%;
+  background-color: map-get($colors, white);
+  height: 24px;
+  width: 24px;
+  padding-top: 8px;
+  img{
+    height: 8px;
   }
 }

@@ -42,13 +42,15 @@ import {
   ActivePageService,
   FormAndFrameworkUtilService,
   CanvasPlayerService,
-  SplashScreenService
+  SplashScreenService,
+  GroupHandlerService,
+  CollectionService,
+  ContentAggregatorHandler
 } from '../services/index';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
 import { UserTypeSelectionPageModule } from './user-type-selection/user-type-selection.module';
 import { ComponentsModule } from './components/components.module';
-import { UserAndGroupsPageModule } from './user-and-groups/user-and-groups.module';
 import { LocalNotifications } from '@ionic-native/local-notifications/ngx';
 import { PageFilterPageModule } from './page-filter/page-filter.module';
 import { PageFilterPage } from './page-filter/page-filter.page';
@@ -64,10 +66,17 @@ import {
 import { SplashscreenImportActionHandlerDelegate } from '@app/services/sunbird-splashscreen/splashscreen-import-action-handler-delegate';
 import { SplaschreenDeeplinkActionHandlerDelegate } from '@app/services/sunbird-splashscreen/splaschreen-deeplink-action-handler-delegate';
 import { LocalCourseService } from '@app/services/local-course.service';
-import { ContentType } from './app.constant';
 import { ExternalIdVerificationService } from '@app/services/externalid-verification.service';
 import { TextbookTocService } from '@app/app/collection-detail-etb/textbook-toc-service';
-import {NativePageTransitions} from '@ionic-native/native-page-transitions/ngx';
+import { NativePageTransitions } from '@ionic-native/native-page-transitions/ngx';
+import { NavigationService } from '@app/services/navigation-handler.service';
+import { CsPrimaryCategory, CsContentType } from '@project-sunbird/client-services/services/content';
+import {AliasBoardName} from '../pipes/alias-board-name/alias-board-name';
+import { DownloadPdfService } from '@app/services/download-pdf/download-pdf.service';
+import {ConsentService} from '@app/services/consent-service';
+import { ProfileHandler } from '@app/services/profile-handler';
+import {configuration} from '@app/configuration/configuration';
+import { LocationHandler } from '@app/services/location-handler';
 
 // AoT requires an exported function for factories
 export function translateHttpLoaderFactory(httpClient: HttpClient) {
@@ -119,9 +128,6 @@ export const contentService = () => {
 export const contentFeedbackService = () => {
   return SunbirdSdk.instance.contentFeedbackService;
 };
-export const summarizerService = () => {
-  return SunbirdSdk.instance.summarizerService;
-};
 export const eventsBusService = () => {
   return SunbirdSdk.instance.eventsBusService;
 };
@@ -162,7 +168,9 @@ export function faqService() {
 export function archiveService() {
   return SunbirdSdk.instance.archiveService;
 }
-
+export const discussionService = () => {
+  return SunbirdSdk.instance.discussionService;
+};
 export function sdkDriverFactory(): any {
   return [{
     provide: 'SDK_CONFIG',
@@ -222,9 +230,6 @@ export function sdkDriverFactory(): any {
     provide: 'CONTENT_FEEDBACK_SERVICE',
     useFactory: contentFeedbackService
   }, {
-    provide: 'SUMMARIZER_SERVICE',
-    useFactory: summarizerService
-  }, {
     provide: 'EVENTS_BUS_SERVICE',
     useFactory: eventsBusService
   }, {
@@ -260,6 +265,10 @@ export function sdkDriverFactory(): any {
   }, {
     provide: 'ARCHIVE_SERVICE',
     useFactory: archiveService
+  },
+  {
+    provide: 'DISCUSSION_SERVICE',
+    useFactory: discussionService
   }
   ];
 }
@@ -285,6 +294,7 @@ export const sunbirdSdkFactory =
         fileConfig: {
         },
         apiConfig: {
+          debugMode: configuration.debug,
           host: buildConfigValues['BASE_URL'],
           user_authentication: {
             redirectUrl: buildConfigValues['OAUTH_REDIRECT_URL'],
@@ -336,6 +346,8 @@ export const sunbirdSdkFactory =
         profileServiceConfig: {
           profileApiPath: '/api/user/v1',
           profileApiPath_V2: '/api/user/v2',
+          profileApiPath_V3: '/api/user/v3',
+          profileApiPath_V4: '/api/user/v4',
           tenantApiPath: '/v1/tenant',
           otpApiPath: '/api/otp/v1',
           searchLocationApiPath: '/api/data/v1',
@@ -364,7 +376,7 @@ export const sunbirdSdkFactory =
           showEndPage: false,
           endPage: [{
             template: 'assessment',
-            contentType: [ContentType.SELF_ASSESS]
+            contentType: [CsContentType.SELF_ASSESS]
           }],
           splash: {
             webLink: '',
@@ -425,7 +437,6 @@ declare const sbutility;
     UserTypeSelectionPageModule,
     PageFilterPageModule,
     PageFilterOptionsPageModule,
-    UserAndGroupsPageModule,
     TermsAndConditionsPageModule
   ],
   providers: [
@@ -453,6 +464,8 @@ declare const sbutility;
     AppHeaderService,
     AppRatingService,
     FormAndFrameworkUtilService,
+    DownloadPdfService,
+    CollectionService,
     Device,
     Network,
     AndroidPermissionsService,
@@ -466,7 +479,14 @@ declare const sbutility;
     SplashScreenService,
     ExternalIdVerificationService,
     TextbookTocService,
-      NativePageTransitions,
+    GroupHandlerService,
+    NativePageTransitions,
+    NavigationService,
+    ContentAggregatorHandler,
+    AliasBoardName,
+    ConsentService,
+    ProfileHandler,
+    LocationHandler,
     { provide: RouteReuseStrategy, useClass: IonicRouteStrategy },
     ...sunbirdSdkServicesProvidersFactory(),
     { provide: ErrorHandler, useClass: CrashAnalyticsErrorLogger },

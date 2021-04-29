@@ -1,4 +1,5 @@
 @import "src/assets/styles/variables";
+@import "src/assets/styles/_variables.scss";
 .popover-alert .popover-content {
     margin: 0;
     width: 100% !important;
@@ -11,38 +12,35 @@
     transform-origin: bottom -100% !important;
     transform: translateY(0) !important;
   }
-  
+
   .popover-alert ion-backdrop {
     background-color: map-get($colors, black) !important;
     opacity: 0.4 !important;
   }
-  
+
   .popover-alert .close-button{
-      background-color: #ffffff;
+      background-color: map-get($colors, white);
       box-shadow: unset;
-      color: black;
+      color: map-get($colors, black);
+      float: right;
+      ion-icon {
+        padding: 0;
+        margin-top: 10px;
+      }
   }
 
   .popover-alert .alert-header{
-    margin-left: 2px 
+    margin-left: 2px
   }
   .popover-alert .col-2{
     padding: 0 ;
     margin-left: 20px ;
-  } 
+  }
 
   .popover-alert .alert-button {
     margin-top: 26px;
     border-radius: 5px;
   }
-
-  .popover-alert .close-button{
-    float: right;
-       ion-icon {
-      padding: 0;
-      margin-top: 10px;
-    }
-  } 
 
   .popover-alert .alert-header-content{
     padding: 0;

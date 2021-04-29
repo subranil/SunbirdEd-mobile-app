@@ -21,3 +21,6 @@ export { ContentShareHandlerService } from './content/content-share-handler.serv
 export { CanvasPlayerService } from './canvas-player.service';
 export { SplashScreenService } from './splash-screen.service';
 export { LocalCourseService } from './local-course.service';
+export { GroupHandlerService } from './group/group-handler.service';
+export { CollectionService } from './collection.service';
+export {ContentAggregatorHandler} from './content/content-aggregator-handler.service';

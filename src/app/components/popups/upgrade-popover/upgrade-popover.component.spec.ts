@@ -7,6 +7,13 @@ import { AppVersion } from '@ionic-native/app-version/ngx';
 
 describe('UpgradePopoverComponent', () => {
     let upgradePopoverComponent: UpgradePopoverComponent;
+
+    window.cordova.plugins = {
+        InAppUpdateManager: {
+            checkForImmediateUpdate: jest.fn()
+        }
+    };
+
     const mockUtilityService: Partial<UtilityService> = {
         openPlayStore: jest.fn()
     };
@@ -90,7 +97,6 @@ describe('UpgradePopoverComponent', () => {
         // act
         upgradePopoverComponent.upgradeApp('https://play.google.com/store/apps/details?id=org.sunbird.app');
         // assert
-        expect(mockUtilityService.openPlayStore).toHaveBeenCalledWith('org.sunbird.app');
         expect(mockPopOverController.dismiss).toHaveBeenCalled();
     });
 
@@ -100,7 +106,6 @@ describe('UpgradePopoverComponent', () => {
         // act
         upgradePopoverComponent.upgradeApp('https://play.google.com/store/apps/details?id=org.sunbird.app');
         // assert
-        expect(mockUtilityService.openPlayStore).toHaveBeenCalledWith('org.sunbird.app');
         expect(mockPopOverController.dismiss).not.toHaveBeenCalled();
     });
 
@@ -234,6 +239,89 @@ describe('UpgradeComponent in deeplink ', () => {
         upgradePopoverComponent.cancel();
         // assert
         expect(mockPopOverController.dismiss).toHaveBeenCalled();
+    });
+
+
+});
+
+describe('UpgradeComponent in deeplink for deeplink upgrade scenario ', () => {
+    let upgradePopoverComponent: UpgradePopoverComponent;
+    const mockUtilityService: Partial<UtilityService> = {
+        openPlayStore: jest.fn()
+    };
+    const mockAppVersion: Partial<AppVersion> = {
+        getAppName: jest.fn(() => Promise.resolve('some_string'))
+    };
+    const mockPopOverController: Partial<PopoverController> = {
+        dismiss: jest.fn()
+    };
+
+    const mockTelemetryGeneratorService: Partial<TelemetryGeneratorService> = {
+        generateInteractTelemetry: jest.fn(),
+        generateImpressionTelemetry: jest.fn()
+    };
+
+    const mockNavParams: Partial<NavParams> = {
+        get: jest.fn((arg) => {
+            let value;
+            switch (arg) {
+                case 'upgrade':
+                    value = {
+                        type: 'optional',
+                        title: 'We recommend that you upgrade to the latest version of Sunbird.',
+                        desc: '',
+                        isOnboardingCompleted: false,
+                        currentAppVersionCode: 1,
+                        requiredVersionCode: 2,
+                        isFromDeeplink: true
+                    };
+                    break;
+            }
+            return value;
+        })
+    };
+
+    beforeAll(() => {
+        upgradePopoverComponent = new UpgradePopoverComponent(
+            mockUtilityService as UtilityService,
+            mockPopOverController as PopoverController,
+            mockNavParams as NavParams,
+            mockTelemetryGeneratorService as TelemetryGeneratorService,
+            mockAppVersion as AppVersion
+        );
+    });
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+
+    it('should generate deeplink upgradeinteract event when init() called', (done) => {
+        // arrange
+        // act
+        upgradePopoverComponent.init();
+
+        setTimeout(() => {
+            // assert
+            expect(mockTelemetryGeneratorService.generateImpressionTelemetry).toHaveBeenCalledWith(
+                ImpressionType.VIEW,
+                ImpressionSubtype.DEEPLINK,
+                PageId.UPGRADE_POPUP,
+                Environment.ONBOARDING
+            );
+            expect(mockTelemetryGeneratorService.generateInteractTelemetry).toHaveBeenCalledWith(
+                InteractType.OTHER,
+                InteractSubtype.DEEPLINK_UPGRADE,
+                Environment.ONBOARDING,
+                PageId.UPGRADE_POPUP,
+                undefined,
+                {
+                    currentAppVersionCode: 1,
+                    requiredVersionCode: 2
+                }
+            );
+            done();
+        }, 0);
     });
 
 

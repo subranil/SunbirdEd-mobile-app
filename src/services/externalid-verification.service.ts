@@ -1,5 +1,6 @@
+import { Router } from '@angular/router';
 import { Injectable, Inject } from '@angular/core';
-import { ProfileService, UserFeed } from 'sunbird-sdk';
+import { ProfileService } from 'sunbird-sdk';
 import { AppGlobalService } from './app-global-service.service';
 import { Observable } from 'rxjs';
 import { PopoverController } from '@ionic/angular';
@@ -24,7 +25,8 @@ export class ExternalIdVerificationService {
         private formAndFrameworkUtilService: FormAndFrameworkUtilService,
         private splaschreenDeeplinkActionHandlerDelegate: SplaschreenDeeplinkActionHandlerDelegate,
         private commonUtilService: CommonUtilService,
-        private localCourseService: LocalCourseService
+        private localCourseService: LocalCourseService,
+        private router: Router
     ) {
         this.isCustodianUser$ = this.profileService.isDefaultChannelProfile().pipe(
             map((isDefaultChannelProfile) => isDefaultChannelProfile) as any
@@ -33,7 +35,23 @@ export class ExternalIdVerificationService {
 
     async showExternalIdVerificationPopup() {
         this.appGlobalService.closeSigninOnboardingLoader();
+        if (this.appGlobalService.redirectUrlAfterLogin) {
+            this.router.navigate(
+                [this.appGlobalService.redirectUrlAfterLogin],
+                {
+                    state: {
+                        fromRegistrationFlow: true
+                    },
+                    replaceUrl: true
+                }
+            );
+            this.appGlobalService.redirectUrlAfterLogin = '';
+        }
         if (await this.checkQuizContent()) {
+            return;
+        }
+        const profileSession = await this.profileService.getActiveProfileSession().toPromise();
+        if (profileSession.managedSession) {
             return;
         }
         const session = await this.appGlobalService.authService.getSession().toPromise();

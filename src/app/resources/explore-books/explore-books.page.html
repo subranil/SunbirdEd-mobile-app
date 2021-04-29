@@ -42,6 +42,7 @@
     </div>
   </form>
 
+  <div class="explore-results-section">
   <div class="empty-search-result ion-text-center" *ngIf="!showLoader && !contentSearchResult.length" padding-top>
     {{ 'EMPTY_SEARCH_RESULTS' | translate }}
   </div>
@@ -51,8 +52,9 @@
   </div>
   <ng-container *ngFor="let content of contentSearchResult; let i = index">
     <div class="sb-card-container sb-card-textbook-container">
-      <app-text-book-card [content]="content" [layoutName]="layoutName" (click)="openContent(content, i)">
-      </app-text-book-card>
+      <sb-library-card [content]="content" [type]="LibraryCardTypes.MOBILE_TEXTBOOK"
+        (click)="openContent(content, i)" [cardImg]="commonUtilService.getContentImg(content)">
+      </sb-library-card>
     </div>
   </ng-container>
 
@@ -65,7 +67,7 @@
     </ion-text>
     <p class="offline-content">{{ 'OFFLINE_WARNING_ETBUI' | translate }}</p>
   </div>
-
+  </div>
 </ion-content>
 <ion-button expand="block" class="sort-by" *ngIf="!showLoader && contentSearchResult.length && checkedSortByButton"
   (click)="openSortOptionsModal()"> {{'SORT_BY' | translate}}</ion-button>

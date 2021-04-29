@@ -1,26 +1,51 @@
 import { TextbookTocService } from './textbook-toc-service';
 import {
-  Component, Inject, NgZone, OnInit, ViewChild, ViewEncapsulation, QueryList, ViewChildren,
-  ElementRef, ChangeDetectorRef
+  ChangeDetectorRef,
+  Component,
+  ElementRef,
+  Inject,
+  NgZone,
+  OnInit,
+  ViewChild,
+  ViewEncapsulation
 } from '@angular/core';
 import isObject from 'lodash/isObject';
 import { FileSizePipe } from '@app/pipes/file-size/file-size';
-import { IonContent as iContent } from '@ionic/angular';
+import { Events, IonContent as iContent, Platform, PopoverController } from '@ionic/angular';
 import {
-  Events, Platform, PopoverController,
-} from '@ionic/angular';
-import {
-  Content, ContentAccess, ContentAccessStatus, ContentDetailRequest, ContentEventType,
-  ContentImport, ContentImportCompleted, ContentImportRequest,
-  ContentImportResponse, ContentImportStatus, ContentMarkerRequest, ContentService, ContentUpdate, CorrelationData,
-  DownloadEventType, DownloadProgress, EventsBusEvent, EventsBusService, MarkerType, Profile, ProfileService,
-  Rollup, StorageService, TelemetryErrorCode, TelemetryObject, DownloadService, DownloadTracking
+  Content,
+  ContentAccess,
+  ContentAccessStatus,
+  ContentDetailRequest,
+  ContentEventType,
+  ContentImport,
+  ContentImportCompleted,
+  ContentImportRequest,
+  ContentImportResponse,
+  ContentImportStatus,
+  ContentMarkerRequest,
+  ContentService,
+  ContentUpdate,
+  CorrelationData,
+  DownloadEventType,
+  DownloadProgress,
+  DownloadService,
+  DownloadTracking,
+  EventsBusEvent,
+  EventsBusService,
+  MarkerType,
+  Profile,
+  ProfileService,
+  Rollup,
+  StorageService,
+  TelemetryErrorCode,
+  TelemetryObject
 } from 'sunbird-sdk';
 import {
-  Environment, ErrorType, ImpressionType, InteractSubtype, InteractType, Mode, PageId, ID
+  Environment, ErrorType, ImpressionType, InteractSubtype, InteractType, Mode, PageId, ID, CorReleationDataType
 } from '../../services/telemetry-constants';
 import { Subscription, Observable } from 'rxjs';
-import { ContentType, EventTopics, MimeType, RouterLinks, ShareItemType } from '../../app/app.constant';
+import { EventTopics, RouterLinks, ShareItemType } from '../../app/app.constant';
 import {
   AppGlobalService, AppHeaderService, CommonUtilService,
   TelemetryGeneratorService
@@ -30,14 +55,18 @@ import { Location } from '@angular/common';
 import { SbSharePopupComponent } from '../components/popups/sb-share-popup/sb-share-popup.component';
 
 import {
-  ConfirmAlertComponent
+  ConfirmAlertComponent, CollectionChildComponent
 } from '../components';
-import { Router, NavigationExtras } from '@angular/router';
+import { Router } from '@angular/router';
 import { ContentUtil } from '@app/util/content-util';
-import { tap, share } from 'rxjs/operators';
+import { share } from 'rxjs/operators';
 import { ContentPlayerHandler } from '@app/services/content/player/content-player-handler';
 import { ContentInfo } from '@app/services/content/content-info';
 import { ContentDeleteHandler } from '@app/services/content/content-delete-handler';
+import { SbProgressLoader } from '../../services/sb-progress-loader.service';
+import { NavigationService } from '@app/services/navigation-handler.service';
+import { CsPrimaryCategory } from '@project-sunbird/client-services/services/content';
+import { IButtonConfig, TocCardType, IAccordianConfig, ExpandMode, ExpandBehavior } from '@project-sunbird/common-consumption';
 
 @Component({
   selector: 'app-collection-detail-etb',
@@ -46,8 +75,6 @@ import { ContentDeleteHandler } from '@app/services/content/content-delete-handl
   encapsulation: ViewEncapsulation.None,
 })
 export class CollectionDetailEtbPage implements OnInit {
-
-  @ViewChildren('filteredItems') public filteredItemsQueryList: QueryList<any>;
 
   facets: any;
   selected: boolean;
@@ -63,11 +90,11 @@ export class CollectionDetailEtbPage implements OnInit {
   mimeTypes = [
     { name: 'ALL', selected: true, value: ['all'], iconNormal: '', iconActive: '' },
     {
-      name: 'VIDEOS', value: ['video/mp4', 'video/x-youtube', 'video/webm'], iconNormal: './assets/imgs/play.svg',
+      name: 'VIDEO', value: ['video/mp4', 'video/x-youtube', 'video/webm'], iconNormal: './assets/imgs/play.svg',
       iconActive: './assets/imgs/play-active.svg'
     },
     {
-      name: 'DOCS', value: ['application/pdf', 'application/epub', 'application/msword'], iconNormal: './assets/imgs/doc.svg',
+      name: 'DOC', value: ['application/pdf', 'application/epub', 'application/msword'], iconNormal: './assets/imgs/doc.svg',
       iconActive: './assets/imgs/doc-active.svg'
     },
     {
@@ -205,7 +232,8 @@ export class CollectionDetailEtbPage implements OnInit {
   public shouldGenerateEndTelemetry = false;
   public source = '';
   isChildClickable = false;
-  shownGroup = null;
+  hiddenGroups = new Set();
+  shownGroups = undefined;
   content: any;
   data: any;
   isChild = false;
@@ -220,6 +248,7 @@ export class CollectionDetailEtbPage implements OnInit {
   appName: any;
   @ViewChild(iContent) ionContent: iContent;
   @ViewChild('stickyPillsRef') stickyPillsRef: ElementRef;
+  @ViewChild('collectionChildComp') collectionChildComp: CollectionChildComponent;
   private eventSubscription: Subscription;
 
   showDownload: boolean;
@@ -234,9 +263,7 @@ export class CollectionDetailEtbPage implements OnInit {
   public telemetryObject: TelemetryObject;
   public rollUpMap: { [key: string]: Rollup } = {};
   private previousHeaderBottomOffset?: number;
-  lastContentPlayed: string;
   isContentPlayed = false;
-  playingContent: Content;
   contentDeleteObservable: any;
 
   _licenseDetails: any;
@@ -250,6 +277,15 @@ export class CollectionDetailEtbPage implements OnInit {
       this._licenseDetails = val;
     }
   }
+  pageId = PageId.COLLECTION_DETAIL;
+  collectionTocData: Content;
+  TocCardType = TocCardType;
+  activeContent;
+  playBtnConfig: IButtonConfig;
+  accordianConfig: IAccordianConfig = {
+    expandMode: ExpandMode.SINGLE,
+    expandBehavior: ExpandBehavior.EXPAND_FIRST
+  };
 
   constructor(
     @Inject('CONTENT_SERVICE') private contentService: ContentService,
@@ -263,6 +299,7 @@ export class CollectionDetailEtbPage implements OnInit {
     private platform: Platform,
     private appGlobalService: AppGlobalService,
     private commonUtilService: CommonUtilService,
+    private navService: NavigationService,
     private telemetryGeneratorService: TelemetryGeneratorService,
     private fileSizePipe: FileSizePipe,
     private headerService: AppHeaderService,
@@ -272,6 +309,7 @@ export class CollectionDetailEtbPage implements OnInit {
     private textbookTocService: TextbookTocService,
     private contentPlayerHandler: ContentPlayerHandler,
     private contentDeleteHandler: ContentDeleteHandler,
+    private sbProgressLoader: SbProgressLoader
   ) {
     this.objRollup = new Rollup();
     this.defaultAppIcon = 'assets/imgs/ic_launcher.png';
@@ -289,7 +327,7 @@ export class CollectionDetailEtbPage implements OnInit {
     this.batchDetails = extras.batchDetails;
     this.pageName = extras.pageName;
     this.depth = extras.depth;
-    this.corRelationList = extras.corRelation;
+    this.corRelationList = extras.corRelation || [];
     this.shouldGenerateEndTelemetry = extras.shouldGenerateEndTelemetry;
     this.source = extras.source;
     this.fromCoursesPage = extras.fromCoursesPage;
@@ -308,6 +346,11 @@ export class CollectionDetailEtbPage implements OnInit {
   }
 
   ngOnInit() {
+    this.playBtnConfig = {
+      label: this.commonUtilService.translateMessage('PLAY'),
+      show: true
+    };
+
     this.commonUtilService.getAppName().then((res) => { this.appName = res; });
     window['scrollWindow'] = this.ionContent;
     this.trackDownloads$ = this.downloadService.trackDownloads({ groupBy: { fieldPath: 'rollUp.l1', value: this.identifier } }).pipe(
@@ -315,6 +358,7 @@ export class CollectionDetailEtbPage implements OnInit {
   }
 
   ionViewWillEnter() {
+    this.headerService.showStatusBar();
     this.registerDeviceBackButton();
     this.zone.run(() => {
       this.headerObservable = this.headerService.headerEventEmitted$.subscribe(eventName => {
@@ -325,7 +369,8 @@ export class CollectionDetailEtbPage implements OnInit {
       this.headerConfig.showHeader = false;
       this.headerConfig.showBurgerMenu = false;
       this.headerService.updatePageConfig(this.headerConfig);
-      this.shownGroup = null;
+      this.hiddenGroups.clear();
+      this.shownGroups = undefined;
       this.assignCardData();
       this.resetVariables();
       this.setContentDetails(this.identifier, true);
@@ -345,6 +390,10 @@ export class CollectionDetailEtbPage implements OnInit {
     });
   }
 
+  ionViewDidEnter() {
+    this.sbProgressLoader.hide({ id: this.identifier });
+  }
+
   private assignCardData() {
     if (!this.didViewLoad) {
       this.objRollup = ContentUtil.generateRollUp(this.cardData.hierarchyInfo, this.cardData.identifier);
@@ -359,7 +408,8 @@ export class CollectionDetailEtbPage implements OnInit {
 
   refreshContentDetails(data) {
     this.resetVariables();
-    this.shownGroup = null;
+    this.shownGroups = undefined;
+    this.hiddenGroups.clear();
     this.setExtrasData(data);
     this.didViewLoad = false;
     this.assignCardData();
@@ -390,26 +440,17 @@ export class CollectionDetailEtbPage implements OnInit {
     this.contentService.setContentMarker(contentMarkerRequest).toPromise().then();
   }
 
-
   // toggle the card
   toggleGroup(group, content, openCarousel?) {
     let isCollapsed = true;
     if (!openCarousel && this.isGroupShown(group)) {
       isCollapsed = false;
-      this.shownGroup = null;
+      this.shownGroups = undefined;
+      this.hiddenGroups.add(group);
     } else {
       isCollapsed = false;
-      this.shownGroup = group;
-      setTimeout(() => {
-        if (document.getElementById(content.identifier)) {
-          window['scrollWindow'].getScrollElement()
-            .scrollTo({
-              top: document.getElementById(content.identifier).offsetTop - 165,
-              left: 0,
-              behavior: 'smooth'
-            });
-        }
-      }, 100);
+      this.shownGroups = group;
+      this.hiddenGroups.delete(group);
     }
     const values = new Map();
     values['isCollapsed'] = isCollapsed;
@@ -428,7 +469,11 @@ export class CollectionDetailEtbPage implements OnInit {
 
   // to check whether the card is toggled or not
   isGroupShown(group) {
-    return this.shownGroup === group;
+    if (this.activeMimeTypeFilter.indexOf('all') === 0) {
+      return this.shownGroups === group;
+    } else {
+      return !this.hiddenGroups.has(group);
+    }
   }
 
   changeValue(text) {
@@ -447,7 +492,7 @@ export class CollectionDetailEtbPage implements OnInit {
       this.generateQRSessionEndEvent(this.source, this.cardData.identifier);
     }
     if (this.source === PageId.ONBOARDING_PROFILE_PREFERENCES) {
-      this.router.navigate([`/${RouterLinks.PROFILE_SETTINGS}`], { state: {showFrameworkCategoriesMenu: true  }, replaceUrl: true });
+      this.router.navigate([`/${RouterLinks.PROFILE_SETTINGS}`], { state: { showFrameworkCategoriesMenu: true }, replaceUrl: true });
     } else {
       this.location.back();
     }
@@ -473,9 +518,12 @@ export class CollectionDetailEtbPage implements OnInit {
       emitUpdateIfAny: refreshContentDetails
     };
     this.contentService.getContentDetails(option).toPromise()
-      .then((data: Content) => {
+      .then((data: Content | any) => {
         if (data) {
           this.licenseDetails = data.contentData.licenseDetails || this.licenseDetails;
+          if (data.contentData.attributions && data.contentData.attributions.length) {
+            data.contentData.attributions = (data.contentData.attributions.sort()).join(', ');
+          }
           if (!data.isAvailableLocally) {
             this.contentDetail = data;
             this.telemetryGeneratorService.generatefastLoadingTelemetry(
@@ -488,7 +536,7 @@ export class CollectionDetailEtbPage implements OnInit {
             );
             this.contentService.getContentHeirarchy(option).toPromise()
               .then((content: Content) => {
-                this.childrenData = content.children;
+                this.setTocData(content);
                 this.showSheenAnimation = false;
                 this.toggleGroup(0, this.content);
                 this.telemetryGeneratorService.generatefastLoadingTelemetry(
@@ -516,15 +564,6 @@ export class CollectionDetailEtbPage implements OnInit {
       });
   }
 
-  showLicensce() {
-    this.showCredits = !this.showCredits;
-    if (this.showCredits) {
-      this.licenseSectionClicked('expanded');
-    } else {
-      this.licenseSectionClicked('collapsed');
-    }
-  }
-
   /**
    * Function to extract api response.
    */
@@ -541,7 +580,6 @@ export class CollectionDetailEtbPage implements OnInit {
       this.userRating = contentFeedback[0].rating;
       this.ratingComment = contentFeedback[0].comments;
     }
-
 
     if (Boolean(data.isAvailableLocally)) {
       this.showLoading = false;
@@ -663,6 +701,7 @@ export class CollectionDetailEtbPage implements OnInit {
             this.refreshHeader();
             this.showChildrenLoader = false;
             this.childrenData.length = 0;
+            this.collectionTocData.children.length = 0;
           }
         });
       })
@@ -703,7 +742,10 @@ export class CollectionDetailEtbPage implements OnInit {
             if (this.textbookTocService.textbookIds.rootUnitId && this.activeMimeTypeFilter !== ['all']) {
               this.onFilterMimeTypeChange(this.mimeTypes[0].value, 0, this.mimeTypes[0].name);
             }
-            this.childrenData = data.children;
+            if (this.textbookTocService.textbookIds.content) {
+              this.activeContent = this.textbookTocService.textbookIds.content;
+            }
+            this.setTocData(data);
             this.changeDetectionRef.detectChanges();
           }
 
@@ -713,16 +755,6 @@ export class CollectionDetailEtbPage implements OnInit {
             this.getContentsSize(data.children || []);
           }
           this.showChildrenLoader = false;
-          const divElement = this.filteredItemsQueryList.find((f) => f.nativeElement.id);
-          let carouselIndex = this.childrenData
-            .findIndex((d: Content) => {
-              return divElement.nativeElement.id === d.identifier;
-            });
-          if (this.textbookTocService.textbookIds.rootUnitId) {
-            carouselIndex = this.childrenData.findIndex((content) => this.textbookTocService.textbookIds.rootUnitId === content.identifier);
-            // carouselIndex = carouselIndex > 0 ? carouselIndex : 0;
-          }
-          this.toggleGroup(carouselIndex, this.content, true);
           if (this.textbookTocService.textbookIds.contentId) {
             setTimeout(() => {
               (this.stickyPillsRef.nativeElement as HTMLDivElement).classList.add('sticky');
@@ -753,6 +785,11 @@ export class CollectionDetailEtbPage implements OnInit {
     // this.ionContent.scrollTo(0, this.scrollPosition);
   }
 
+  private setTocData(content) {
+    this.childrenData = content.children;
+    this.collectionTocData = content;
+  }
+
   getContentsSize(data) {
     data.forEach((value) => {
       this.breadCrumb.set(value.identifier, value.contentData.name);
@@ -768,7 +805,7 @@ export class CollectionDetailEtbPage implements OnInit {
       if (value.children) {
         this.getContentsSize(value.children);
       }
-      if (value.isAvailableLocally === false) {
+      if (!value.isAvailableLocally && value.contentData.downloadUrl) {
         this.downloadIdentifiers.add(value.contentData.identifier);
         this.rollUpMap[value.contentData.identifier] = ContentUtil.generateRollUp(value.hierarchyInfo, undefined);
       }
@@ -780,49 +817,31 @@ export class CollectionDetailEtbPage implements OnInit {
   }
 
 
-  navigateToDetailsPage(content: any, depth) {
+  navigateToDetailsPage(content: any, depth, corRelationData?) {
+    const corRelationList = [...this.corRelationList];
+    if (corRelationData) {
+      corRelationList.push(corRelationData);
+    }
     this.zone.run(() => {
-      if (content.contentType === ContentType.COURSE) {
-        this.router.navigate([RouterLinks.ENROLLED_COURSE_DETAILS], {
-          state: {
+      switch (ContentUtil.isTrackable(content)) {
+        case 1:
+        case 0:
+          this.navService.navigateToTrackableCollection({
             content,
             depth,
             contentState: this.stateData,
-            corRelation: this.corRelationList
-          }
-        });
-      } else if (content.mimeType === MimeType.COLLECTION) {
-        this.isDepthChild = true;
-        this.router.navigate([RouterLinks.COLLECTION_DETAIL_ETB], {
-          state: {
+            corRelation: corRelationList
+          });
+          break;
+        case -1:
+          this.navService.navigateToContent({
+            isChildContent: true,
             content,
             depth,
             contentState: this.stateData,
-            corRelation: this.corRelationList
-          }
-        });
-      } else {
-        this.router.navigate([RouterLinks.CONTENT_DETAILS], {
-          state: {
-            content,
-            depth,
-            contentState: this.stateData,
-            corRelation: this.corRelationList
-          }
-        });
-      }
-    });
-  }
-
-  navigateToContentPage(content: any, depth) {
-    this.router.navigate([RouterLinks.CONTENT_DETAILS], {
-      state: {
-        isChildContent: true,
-        content,
-        depth,
-        contentState: this.stateData,
-        corRelation: this.corRelationList,
-        breadCrumb: this.breadCrumb
+            corRelation: corRelationList,
+            breadCrumb: this.breadCrumb
+          });
       }
     });
   }
@@ -886,7 +905,9 @@ export class CollectionDetailEtbPage implements OnInit {
               this.showDownloadBtn = false;
               this.isDownloadCompleted = true;
               this.showDownload = false;
-              this.contentDetail.isAvailableLocally = true;
+              if (this.contentDetail) {
+                this.contentDetail.isAvailableLocally = true;
+              }
               this.downloadPercentage = 0;
               this.updateSavedResources();
               this.setChildContents();
@@ -1008,7 +1029,7 @@ export class CollectionDetailEtbPage implements OnInit {
   generateEndEvent(objectId, objectType, objectVersion) {
     const telemetryObject = new TelemetryObject(objectId, objectType, objectVersion);
     this.telemetryGeneratorService.generateEndTelemetry(
-      objectType ? objectType : ContentType.TEXTBOOK,
+      objectType ? objectType : CsPrimaryCategory.DIGITAL_TEXTBOOK,
       Mode.PLAY,
       PageId.COLLECTION_DETAIL,
       Environment.HOME,
@@ -1116,21 +1137,6 @@ export class CollectionDetailEtbPage implements OnInit {
       this.corRelationList);
   }
 
-  licenseSectionClicked(params) {
-    const telemetryObject = new TelemetryObject(this.objId, this.objType, this.objVer);
-    this.telemetryGeneratorService.generateInteractTelemetry(
-      params === 'expanded' ? InteractType.LICENSE_CARD_EXPANDED : InteractType.LICENSE_CARD_COLLAPSED,
-      '',
-      undefined,
-      PageId.COLLECTION_DETAIL,
-      telemetryObject,
-      undefined,
-      this.objRollup,
-      this.corRelationList,
-      ID.LICENSE_CARD_CLICKED
-    );
-  }
-
   /**
    * Ionic life cycle hook
    */
@@ -1204,12 +1210,6 @@ export class CollectionDetailEtbPage implements OnInit {
       type.selected = false;
     });
     this.mimeTypes[idx].selected = true;
-    this.filteredItemsQueryList.changes.pipe(
-      tap((v) => {
-        this.changeDetectionRef.detectChanges();
-        values['contentLength'] = v.length;
-      })
-    ).subscribe();
     this.telemetryGeneratorService.generateInteractTelemetry(
       InteractType.TOUCH,
       InteractSubtype.FILTER_CLICKED,
@@ -1222,9 +1222,12 @@ export class CollectionDetailEtbPage implements OnInit {
   }
 
   openTextbookToc() {
-    this.shownGroup = null;
-    this.router.navigate([`/${RouterLinks.COLLECTION_DETAIL_ETB}/${RouterLinks.TEXTBOOK_TOC}`],
-      { state: { childrenData: this.childrenData, parentId: this.identifier } });
+    this.hiddenGroups.clear();
+    this.shownGroups = undefined;
+    this.navService.navigateTo([`/${RouterLinks.COLLECTION_DETAIL_ETB}/${RouterLinks.TEXTBOOK_TOC}`],
+      { childrenData: this.childrenData, parentId: this.identifier })
+    // this.router.navigate([`/${RouterLinks.COLLECTION_DETAIL_ETB}/${RouterLinks.TEXTBOOK_TOC}`], // **** check needed ****
+    //   { state: { childrenData: this.childrenData, parentId: this.identifier } });
     const values = new Map();
     values['selectChapterVisible'] = this.isChapterVisible;
     this.telemetryGeneratorService.generateInteractTelemetry(
@@ -1321,7 +1324,6 @@ export class CollectionDetailEtbPage implements OnInit {
                 PageId.COLLECTION_DETAIL,
                 JSON.stringify(stackTrace),
               );
-              this.commonUtilService.showToast('UNABLE_TO_FETCH_CONTENT');
             }
           } else if (data && data[0].status === ContentImportStatus.NOT_FOUND) {
             this.showLoading = false;
@@ -1347,69 +1349,80 @@ export class CollectionDetailEtbPage implements OnInit {
       });
   }
 
-  playContent(event) {
-    this.headerService.hideHeader();
-
-    this.playingContent = event.content;
-    const contentInfo: ContentInfo = {
-      telemetryObject: ContentUtil.getTelemetryObject(this.playingContent),
-      rollUp: ContentUtil.generateRollUp(this.playingContent.hierarchyInfo, this.playingContent.identifier),
-      correlationList: this.corRelationList,
-      hierachyInfo: this.playingContent.hierarchyInfo
-    };
-    let isStreaming: boolean;
-    let shouldDownloadAndPlay: boolean;
-    if (this.playingContent.contentData.streamingUrl &&
-      this.commonUtilService.networkInfo.isNetworkAvailable && !(this.playingContent.mimeType === 'application/vnd.ekstep.h5p-archive')) {
-      isStreaming = true;
-      shouldDownloadAndPlay = false;
-      this.lastContentPlayed = this.playingContent.identifier;
-      this.generateInteractTelemetry(isStreaming, contentInfo.telemetryObject, contentInfo.rollUp, contentInfo.correlationList);
-      this.contentPlayerHandler.launchContentPlayer(this.playingContent, isStreaming, shouldDownloadAndPlay, contentInfo, false, true);
-    } else if (!this.commonUtilService.networkInfo.isNetworkAvailable && this.playingContent.isAvailableLocally) {
-      isStreaming = false;
-      shouldDownloadAndPlay = false;
-      this.lastContentPlayed = this.playingContent.identifier;
-      this.generateInteractTelemetry(isStreaming, contentInfo.telemetryObject, contentInfo.rollUp, contentInfo.correlationList);
-      this.contentPlayerHandler.launchContentPlayer(this.playingContent, isStreaming, shouldDownloadAndPlay, contentInfo, false, true);
-    } else if (this.commonUtilService.networkInfo.isNetworkAvailable && this.playingContent.isAvailableLocally) {
-      isStreaming = false;
-      shouldDownloadAndPlay = true;
-      this.lastContentPlayed = this.playingContent.identifier;
-      this.generateInteractTelemetry(isStreaming, contentInfo.telemetryObject, contentInfo.rollUp, contentInfo.correlationList);
-      this.contentPlayerHandler.launchContentPlayer(this.playingContent, isStreaming, shouldDownloadAndPlay, contentInfo, false, true);
-    } else if (!this.commonUtilService.networkInfo.isNetworkAvailable && !this.playingContent.isAvailableLocally) {
-      const params: NavigationExtras = {
-        state: {
-          isChildContent: true,
-          content: this.playingContent,
-          corRelation: this.corRelationList,
-        }
-      };
-      this.router.navigate([RouterLinks.CONTENT_DETAILS], params);
-    } else {
-      const params: NavigationExtras = {
-        state: {
-          isChildContent: true,
-          content: this.playingContent,
-          corRelation: this.corRelationList,
-        }
-      };
-      this.router.navigate([RouterLinks.CONTENT_DETAILS], params);
+  playContent(event, corRelationData?) {
+    const corRelationList = [...this.corRelationList];
+    if (corRelationData) {
+      corRelationList.push(corRelationData);
     }
+
+    const telemetryDetails = {
+      pageId: PageId.COLLECTION_DETAIL,
+      corRelationList
+    };
+
+    const navExtras = {
+      state: {
+        isChildContent: true,
+        content: event.content,
+        depth: 1,
+        contentState: this.stateData,
+        corRelation: corRelationList,
+        breadCrumb: this.breadCrumb
+      }
+    };
+
+    this.contentPlayerHandler.playContent(event.content, navExtras, telemetryDetails, false);
+
   }
 
-  private generateInteractTelemetry(isStreaming: boolean, telemetryObject, rollup, correlationData) {
-    const subType: string = isStreaming ? InteractSubtype.PLAY_ONLINE : InteractSubtype.PLAY_FROM_DEVICE;
+  tocCardClick(event) {
+    if (!(event.event instanceof Event)) {
+      return;
+    }
+
+    const corRelationData = {
+      id: event.rollup[0],
+      type: CorReleationDataType.ROOT_ID
+    };
+
+    this.setActiveContentData(event, InteractSubtype.CONTENT_CLICKED, corRelationData);
+
+    this.navigateToDetailsPage(event.data, 1, corRelationData);
+  }
+
+  playButtonClick(event) {
+    const corRelationData = {
+      id: event.rollup[0],
+      type: CorReleationDataType.ROOT_ID
+    };
+
+    this.setActiveContentData(event, InteractSubtype.PLAY_CLICKED, corRelationData);
+
+    this.playContent({ content: event.data }, corRelationData);
+  }
+
+  private setActiveContentData(event, telemetrySubType, corRelationData) {
+    this.activeContent = event.data;
+    this.textbookTocService.setTextbookIds({ contentId: event.data.identifier, rootUnitId: undefined });
+
+    const corRelationList = [...this.corRelationList];
+    if (corRelationData) {
+      corRelationList.push(corRelationData);
+    }
+    const values = {
+      contentClicked: event.data && event.data.identifier
+    };
+
+    const telemetryObj = ContentUtil.getTelemetryObject(event.data);
+
     this.telemetryGeneratorService.generateInteractTelemetry(
       InteractType.TOUCH,
-      subType,
+      telemetrySubType,
       Environment.HOME,
-      PageId.COLLECTION_DETAIL,
-      telemetryObject,
-      undefined,
-      rollup,
-      correlationData,
+      PageId.TEXTBOOK_TOC, telemetryObj,
+      values,
+      this.objRollup, corRelationList
     );
   }
+
 }

@@ -11,7 +11,6 @@
         }
         &.mytitle{
             color: map-get($colors, primary_black);
-            background-color:map-get($colors, light_gray) !important;
             font-size: 1.2em;
         }
         &.head{
@@ -26,21 +25,14 @@
 
         
     }
-    .item-divider .header{
-        
-    }
 
     .sb-btn-outline-info {
-        background-color: #006DE5 !important;
-        border-radius: 5px !important;
         font-weight: bold;
         font-size: 12px;
-        color: white !important;
-        border-color: white !important;
     }
 
     .background-gray{
-        background: #efeff4;
+        background: map-get($colors, gray_white);
         @include margin(-16px, -26px, 0, -26px);
         @include padding(null, null, null, 25px !important);
     }
@@ -93,7 +85,7 @@
     }
 
     .enroll-msg-ended {
-        color: #e55a28;
+        color: $orange;
         font-size: 0.9em;
     }
 
@@ -114,7 +106,7 @@
         border-radius: 5px !important;
         font-weight: bold;
         font-size: 12px;
-        color: white !important;
-        border-color: white !important;
+        color: map-get($colors, white) !important;
+        border-color: map-get($colors, white) !important;
     }
 }

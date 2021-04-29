@@ -17,6 +17,9 @@ import { CommonUtilService } from '../../../services/common-util.service';
 import { Environment, InteractSubtype, InteractType } from '../../../services/telemetry-constants';
 import { SbPopoverComponent } from '../popups/sb-popover/sb-popover.component';
 import { FileSizePipe } from '@app/pipes/file-size/file-size';
+import { PageId } from './../../../services/telemetry-constants';
+import { ContentUtil } from '@app/util/content-util';
+
 @Component({
   selector: 'app-content-actions',
   templateUrl: './content-actions.component.html',
@@ -25,6 +28,8 @@ import { FileSizePipe } from '@app/pipes/file-size/file-size';
 export class ContentActionsComponent {
 
   content: any;
+  chapter: any;
+  downloadIdentifiers: any;
   data: any;
   isChild = false;
   contentId: string;
@@ -33,17 +38,17 @@ export class ContentActionsComponent {
   userId = '';
   pageName = '';
   showFlagMenu = true;
+  showChapterActions = false;
   public objRollup: Rollup;
   private corRelationList: Array<CorrelationData>;
 
   constructor(
     @Inject('CONTENT_SERVICE') private contentService: ContentService,
+    @Inject('AUTH_SERVICE') private authService: AuthService,
     private navParams: NavParams,
     private toastCtrl: ToastController,
-    @Inject('AUTH_SERVICE') private authService: AuthService,
     private events: Events,
     private translate: TranslateService,
-    private platform: Platform,
     private commonUtilService: CommonUtilService,
     private telemetryGeneratorService: TelemetryGeneratorService,
     private fileSizePipe: FileSizePipe,
@@ -55,16 +60,17 @@ export class ContentActionsComponent {
     this.pageName = this.navParams.get('pageName');
     this.objRollup = this.navParams.get('objRollup');
     this.corRelationList = this.navParams.get('corRelationList');
+    this.chapter = this.navParams.get('chapter');
+    this.downloadIdentifiers = this.navParams.get('downloadIdentifiers');
 
     if (this.navParams.get('isChild')) {
       this.isChild = true;
     }
+    if (this.pageName === PageId.CHAPTER_DETAILS) {
+      this.showChapterActions = true;
+    }
 
     this.contentId = (this.content && this.content.identifier) ? this.content.identifier : '';
-    this.backButtonFunc = this.platform.backButton.subscribeWithPriority(10, () => {
-      this.popOverCtrl.dismiss();
-      this.backButtonFunc.unsubscribe();
-    });
     this.getUserId();
   }
 
@@ -107,12 +113,9 @@ export class ContentActionsComponent {
           component: SbPopoverComponent,
           componentProps: {
             content: this.content,
-            // isChild: this.isDepthChild,
             objRollup: this.objRollup,
-            // pageName: PageId.COLLECTION_DETAIL,
             corRelationList: this.corRelationList,
             sbPopoverHeading: this.commonUtilService.translateMessage('REMOVE_FROM_DEVICE'),
-            // sbPopoverMainTitle: this.commonUtilService.translateMessage('REMOVE_FROM_DEVICE_MSG'),
             sbPopoverMainTitle: this.content.name,
             actionsButtons: [
               {
@@ -121,10 +124,7 @@ export class ContentActionsComponent {
               },
             ],
             icon: null,
-            metaInfo:
-              // this.contentDetail.contentTypesCount.TextBookUnit + 'items' +
-              // this.batchDetails.courseAdditionalInfo.leafNodesCount + 'items' +
-              '(' + this.fileSizePipe.transform(this.content.size, 2) + ')',
+            metaInfo: '(' + this.fileSizePipe.transform(this.content.size, 2) + ')',
             sbPopoverContent: 'Are you sure you want to delete ?'
           },
           cssClass: 'sb-popover danger',
@@ -139,7 +139,6 @@ export class ContentActionsComponent {
       }
       case 1: {
         this.popOverCtrl.dismiss();
-        // this.reportIssue();
         break;
       }
     }
@@ -148,28 +147,34 @@ export class ContentActionsComponent {
   /*
    * shows alert to confirm unenroll send back user selection */
   async unenroll() {
-    const telemetryObject = new TelemetryObject(this.content.identifier, this.content.contentType, this.content.pkgVersion);
     this.telemetryGeneratorService.generateInteractTelemetry(
       InteractType.TOUCH,
       InteractSubtype.UNENROL_CLICKED,
       Environment.HOME,
       this.pageName,
-      telemetryObject,
+      ContentUtil.getTelemetryObject(this.content),
       undefined,
       this.objRollup,
       this.corRelationList);
     this.popOverCtrl.dismiss({ unenroll: true });
   }
 
+  async download() {
+    this.popOverCtrl.dismiss({ download: true });
+  }
+
+  async share() {
+    this.popOverCtrl.dismiss({ share: true });
+  }
+
   async deleteContent() {
-    const telemetryObject = new TelemetryObject(this.content.identifier, this.content.contentType, this.content.pkgVersion);
 
     this.telemetryGeneratorService.generateInteractTelemetry(
       InteractType.TOUCH,
       InteractSubtype.DELETE_CLICKED,
       Environment.HOME,
       this.pageName,
-      telemetryObject,
+      ContentUtil.getTelemetryObject(this.content),
       undefined,
       this.objRollup,
       this.corRelationList);

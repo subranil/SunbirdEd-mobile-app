@@ -3,36 +3,29 @@ import {
     UtilityService,
     TelemetryGeneratorService,
     CommonUtilService,
-    AndroidPermissionsService, InteractType, InteractSubtype
+    AndroidPermissionsService, InteractType, InteractSubtype, AppGlobalService
 } from '../../../../services';
 import { SbSharePopupComponent } from './sb-share-popup.component';
-import {PopoverController, Platform, NavParams, ToastController} from '@ionic/angular';
+import { ContentService } from 'sunbird-sdk';
+import { PopoverController, Platform, NavParams } from '@ionic/angular';
 import {
     Environment,
     ImpressionType,
     ID,
     PageId,
 } from '@app/services/telemetry-constants';
-import { ContentType, MimeType, ShareUrl } from '@app/app/app.constant';
-import {AppVersion} from '@ionic-native/app-version/ngx';
-import {Router} from '@angular/router';
-import {of} from 'rxjs';
+import { AppVersion } from '@ionic-native/app-version/ngx';
+import { of } from 'rxjs';
+import { MimeType } from '../../../app.constant';
+import { CsContentType, CsPrimaryCategory } from '@project-sunbird/client-services/services/content';
 
 describe('SbSharePopupComponent', () => {
     let sbSharePopupComponent: SbSharePopupComponent;
-    const mockPopoverCtrl: Partial<PopoverController> = {
-        dismiss: jest.fn()
-    };
+    const mockContentService: Partial<ContentService> = {};
+    const mockPopoverCtrl: Partial<PopoverController> = {};
     const mockPlatform: Partial<Platform> = {};
-    mockPlatform.backButton = {
-        subscribeWithPriority: jest.fn((_, fn) => fn()),
-    } as any;
-    const mockContentShareHandler: Partial<ContentShareHandlerService> = {
-        shareContent: jest.fn()
-    };
-    const mockUtilityService: Partial<UtilityService> = {
-        getBuildConfigValue: jest.fn(() => Promise.resolve('baseurl'))
-    };
+    const mockContentShareHandler: Partial<ContentShareHandlerService> = {};
+    const mockUtilityService: Partial<UtilityService> = {};
     const mockNavParams: Partial<NavParams> = {
         get: jest.fn((arg) => {
             let value;
@@ -40,9 +33,12 @@ describe('SbSharePopupComponent', () => {
                 case 'content':
                     value = {
                         identifier: 'do_123',
+                        contentType: 'Resource',
+                        primaryCategory: 'learning resource',
                         contentData: {
                             contentType: 'Resource',
-                            pkgVersion: '1'
+                            pkgVersion: '1',
+                            primaryCategory: 'Learning Resource'
                         }
                     } as any;
                     break;
@@ -59,10 +55,7 @@ describe('SbSharePopupComponent', () => {
             return value;
         })
     };
-    const mockTelemetryGeneratorService: Partial<TelemetryGeneratorService> = {
-        generateInteractTelemetry: jest.fn(),
-        generateImpressionTelemetry: jest.fn()
-    };
+    const mockTelemetryGeneratorService: Partial<TelemetryGeneratorService> = {};
     const mockAppVersion: Partial<AppVersion> = {
         getAppName: jest.fn(),
     };
@@ -70,10 +63,13 @@ describe('SbSharePopupComponent', () => {
     const mockPermissionService: Partial<AndroidPermissionsService> = {
         checkPermissions: jest.fn()
     };
-    const mockToastController: Partial<ToastController> = {};
-    const mockRouter: Partial<Router> = {};
+    const mockAppGlobalService: Partial<AppGlobalService> = {
+        setNativePopupVisible: jest.fn()
+    };
+
     beforeAll(() => {
         sbSharePopupComponent = new SbSharePopupComponent(
+            mockContentService as ContentService,
             mockPopoverCtrl as PopoverController,
             mockPlatform as Platform,
             mockContentShareHandler as ContentShareHandlerService,
@@ -83,45 +79,76 @@ describe('SbSharePopupComponent', () => {
             mockAppVersion as AppVersion,
             mockCommonUtilService as CommonUtilService,
             mockPermissionService as AndroidPermissionsService,
+            mockAppGlobalService as AppGlobalService
         );
     });
 
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.resetAllMocks();
     });
 
     it('should create a instance of sbSharePopupComponent', () => {
         expect(sbSharePopupComponent).toBeTruthy();
     });
 
-    it('should generate telemetry on ngOninit', () => {
+    it('should generate telemetry on ngOninit', (done) => {
         // arrange
         const unsubscribeFn = jest.fn();
         sbSharePopupComponent.backButtonFunc = {
             unsubscribe: unsubscribeFn
         } as any;
-        jest.spyOn(sbSharePopupComponent, 'getContentEndPoint').mockImplementation();
+        mockTelemetryGeneratorService.generateInteractTelemetry = jest.fn();
+        mockTelemetryGeneratorService.generateImpressionTelemetry = jest.fn();
+        mockUtilityService.getBuildConfigValue = jest.fn(() => Promise.resolve('baseurl'));
+        mockContentService.getContentDetails = jest.fn(() => of({
+            identifier: 'do_1', mimeType: MimeType.COLLECTION, contentType: CsContentType.TEXTBOOK,
+            primaryCategory: CsPrimaryCategory.DIGITAL_TEXTBOOK.toLowerCase()
+        }));
+        mockPlatform.backButton = {
+            subscribeWithPriority: jest.fn((_, cb) => {
+                setTimeout(() => {
+                    cb();
+                }, 0);
+                return {
+                    unsubscribe: jest.fn()
+                };
+            }),
+        } as any;
+        mockPopoverCtrl.dismiss = jest.fn(() => Promise.resolve(true));
+
         // act
         sbSharePopupComponent.ngOnInit();
         // assert
-        expect(mockTelemetryGeneratorService.generateInteractTelemetry).toHaveBeenCalledWith('root-content',
-            '',
-            Environment.HOME,
-            'content-detail',
-            { id: 'do_123', type: 'Resource', version: '1' },
-            undefined,
-            { l1: 'do_1', l2: 'do_12' },
-            undefined,
-            ID.SHARE);
-        expect(mockTelemetryGeneratorService.generateImpressionTelemetry).toHaveBeenCalledWith(
-            ImpressionType.VIEW, '',
-            PageId.SHARE_CONTENT_POPUP,
-            Environment.HOME,
-            'do_123',
-            'Resource',
-            '1',
-            { l1: 'do_1', l2: 'do_12' },
-            undefined);
+        setTimeout(() => {
+            expect(mockTelemetryGeneratorService.generateInteractTelemetry).toHaveBeenCalledWith('root-content',
+                '',
+                Environment.HOME,
+                'content-detail',
+                { id: 'do_123', type: 'Learning Resource', version: '1' },
+                undefined,
+                { l1: 'do_1', l2: 'do_12' },
+                undefined,
+                ID.SHARE);
+            expect(mockTelemetryGeneratorService.generateImpressionTelemetry).toHaveBeenCalledWith(
+                ImpressionType.VIEW, '',
+                PageId.SHARE_CONTENT_POPUP,
+                Environment.HOME,
+                'do_123',
+                'Learning Resource',
+                '1',
+                { l1: 'do_1', l2: 'do_12' },
+                undefined);
+            expect(mockPopoverCtrl.dismiss).toHaveBeenCalled();
+            expect(mockUtilityService.getBuildConfigValue).toHaveBeenCalledWith('BASE_URL');
+            expect(mockContentService.getContentDetails).toHaveBeenCalledWith({
+                contentId: 'do_1',
+                attachFeedback: false,
+                attachContentAccess: false,
+                emitUpdateIfAny: false
+            });
+            done();
+        }, 0);
     });
 
 
@@ -150,6 +177,7 @@ describe('SbSharePopupComponent', () => {
     it('should call sharecontent on shareLink', () => {
         // arrange
         mockPopoverCtrl.dismiss = jest.fn();
+        mockContentShareHandler.shareContent = jest.fn();
         // act
         sbSharePopupComponent.shareLink();
         // assert
@@ -161,7 +189,7 @@ describe('SbSharePopupComponent', () => {
         // arrange
         mockPopoverCtrl.dismiss = jest.fn();
         mockCommonUtilService.getGivenPermissionStatus = jest.fn(() => Promise.resolve(
-            {hasPermission: true}));
+            { hasPermission: true }));
         // act
         sbSharePopupComponent.shareFile();
         // assert
@@ -176,7 +204,7 @@ describe('SbSharePopupComponent', () => {
         // arrange
         mockPopoverCtrl.dismiss = jest.fn();
         mockCommonUtilService.getGivenPermissionStatus = jest.fn(() => Promise.resolve(
-            {hasPermission: true}));
+            { hasPermission: true }));
         // act
         sbSharePopupComponent.saveFile();
         // assert
@@ -190,7 +218,7 @@ describe('SbSharePopupComponent', () => {
     it('should show Error Toast in share File method if permission is given always denied and reject false', (done) => {
         // arrange
         mockCommonUtilService.getGivenPermissionStatus = jest.fn(() => Promise.resolve(
-            {isPermissionAlwaysDenied: true}));
+            { isPermissionAlwaysDenied: true }));
         mockCommonUtilService.showSettingsPageToast = jest.fn();
         // act
         sbSharePopupComponent.shareFile();
@@ -217,7 +245,7 @@ describe('SbSharePopupComponent', () => {
     it('should show Error Toast in save File method if permission is given always denied and reject false', (done) => {
         // arrange
         mockCommonUtilService.getGivenPermissionStatus = jest.fn(() => Promise.resolve(
-            {isPermissionAlwaysDenied: true}));
+            { isPermissionAlwaysDenied: true }));
         mockCommonUtilService.showSettingsPageToast = jest.fn();
         // act
         sbSharePopupComponent.saveFile();
@@ -242,10 +270,9 @@ describe('SbSharePopupComponent', () => {
     });
 
     it('should call permission popup on shareFile if not given', (done) => {
-        sbSharePopupComponent.exportApk = jest.fn(() => Promise.resolve());
         mockPopoverCtrl.dismiss = jest.fn();
         mockCommonUtilService.getGivenPermissionStatus = jest.fn(() => Promise.resolve(
-            {hasPermission: false}));
+            { hasPermission: false }));
         mockCommonUtilService.translateMessage = jest.fn();
         const presentFN = jest.fn(() => Promise.resolve());
 
@@ -265,7 +292,7 @@ describe('SbSharePopupComponent', () => {
     it('should call storage permission pop-up and NOT_NOW clicked ', (done) => {
         // arrange
         mockCommonUtilService.getGivenPermissionStatus = jest.fn(() => Promise.resolve(
-            {hasPermission: false}));
+            { hasPermission: false }));
         mockPopoverCtrl.dismiss = jest.fn();
 
         mockCommonUtilService.translateMessage = jest.fn(v => v);
@@ -301,9 +328,9 @@ describe('SbSharePopupComponent', () => {
 
     it('should call storage permission pop-up and ALLOW clicked and provide has permission false', (done) => {
         // arrange
-        mockPermissionService.requestPermission = jest.fn(() => of({hasPermission: false}));
+        mockPermissionService.requestPermission = jest.fn(() => of({ hasPermission: false }));
         mockCommonUtilService.getGivenPermissionStatus = jest.fn(() => Promise.resolve(
-            {hasPermission: false}));
+            { hasPermission: false }));
         mockPopoverCtrl.dismiss = jest.fn();
 
         mockCommonUtilService.translateMessage = jest.fn(v => v);
@@ -339,9 +366,9 @@ describe('SbSharePopupComponent', () => {
 
     it('should call storage permission pop-up and ALLOW clicked and provide has permission true ', (done) => {
         // arrange
-        mockPermissionService.requestPermission = jest.fn(() => of({hasPermission: true}));
+        mockPermissionService.requestPermission = jest.fn(() => of({ hasPermission: true }));
         mockCommonUtilService.getGivenPermissionStatus = jest.fn(() => Promise.resolve(
-            {hasPermission: false}));
+            { hasPermission: false }));
         mockPopoverCtrl.dismiss = jest.fn();
 
         mockCommonUtilService.translateMessage = jest.fn(v => v);
@@ -370,9 +397,9 @@ describe('SbSharePopupComponent', () => {
 
     it('should call storage permission pop-up and ALLOW clicked and provide has permission true ', (done) => {
         // arrange
-        mockPermissionService.requestPermission = jest.fn(() => of({isPermissionAlwaysDenied: true}));
+        mockPermissionService.requestPermission = jest.fn(() => of({ isPermissionAlwaysDenied: true }));
         mockCommonUtilService.getGivenPermissionStatus = jest.fn(() => Promise.resolve(
-            {hasPermission: false}));
+            { hasPermission: false }));
         mockPopoverCtrl.dismiss = jest.fn();
 
         mockCommonUtilService.translateMessage = jest.fn(v => v);
@@ -405,46 +432,4 @@ describe('SbSharePopupComponent', () => {
         }, 0);
     });
 
-
-    describe('getContentEndPoint()', () => {
-
-        beforeAll(() => {
-            sbSharePopupComponent = new SbSharePopupComponent(
-                mockPopoverCtrl as PopoverController,
-                mockPlatform as Platform,
-                mockContentShareHandler as ContentShareHandlerService,
-                mockUtilityService as UtilityService,
-                mockNavParams as NavParams,
-                mockTelemetryGeneratorService as TelemetryGeneratorService,
-                mockAppVersion as AppVersion,
-                mockCommonUtilService as CommonUtilService,
-                mockPermissionService as AndroidPermissionsService,
-            );
-        });
-
-        it('should return course endpoint', () => {
-            // arrange
-            // act
-            // assert
-            expect(sbSharePopupComponent.getContentEndPoint({ contentType: ContentType.COURSE } as any)).toEqual(ShareUrl.COURSE);
-        });
-
-        it('should return collection endpoint', () => {
-            // arrange
-            // act
-            sbSharePopupComponent.ngOnInit();
-            // assert
-            expect(sbSharePopupComponent.getContentEndPoint({ mimeType: MimeType.COLLECTION,
-                contentType: ContentType.TEXTBOOK } as any)).toEqual(ShareUrl.COLLECTION);
-        });
-
-        it('should return content endpoint', () => {
-            // arrange
-            // act
-            sbSharePopupComponent.ngOnInit();
-            // assert
-            expect(sbSharePopupComponent.getContentEndPoint(
-                { contentType: ContentType.RESOURCE } as any)).toEqual(ShareUrl.CONTENT);
-        });
-    });
 });

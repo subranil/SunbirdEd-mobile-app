@@ -6,6 +6,9 @@ window.dayjs = require('dayjs')
 
 global.cordova = {
     plugins: {
+        InAppUpdateManager: {
+            checkForImmediateUpdate: () => {}
+        },
         notification: {
             local: {
                 lanchDetails: {},
@@ -14,14 +17,24 @@ global.cordova = {
             }
         },
         diagnostic: {
-            switchToSettings: () => { }
+            switchToSettings: () => { },
+            getPermissionAuthorizationStatus: () => { },
+            permissionStatus: {
+                DENIED_ALWAYS: 'DENIED_ALWAYS'
+            }
         },
         printer: {
             print: () => { }
+        },
+        permissions: {
+            checkPermission: () => { },
+            requestPermissions: () => { },
+            checkPermission: () => { }
         }
     },
     file: {
-        applicationDirectory: "/path"
+        applicationDirectory: "/path",
+        externalRootDirectory: '/path'
     },
     InAppBrowser: {
         open: () => ({
@@ -58,6 +71,7 @@ global.splashscreen = {
     markImportDone: () => { },
     hide: () => { },
     clearPrefs: () => { },
+    setContent: () => { }
 }
 
 global.codePush = {
@@ -70,3 +84,31 @@ global.SyncStatus = {
     INSTALLING_UPDATE: 'INSTALLING_UPDATE',
     ERROR: 'ERROR'
 }
+
+global.plugins = {
+    webViewChecker: {
+        getCurrentWebViewPackageInfo: () => Promise.resolve({versionName: '0'}),
+        openGooglePlayPage: () => Promise.resolve()
+    }
+}
+global.FCMPlugin = {
+    getToken: () => {},
+    onNotification: () => {},
+    onTokenRefresh: () => {},
+    subscribeToTopic: () => {},
+    unsubscribeFromTopic: () => {}
+}
+
+global.sbsync = {
+    onSyncSucces: () => {}
+}
+
+global.qrScanner = {
+    startScanner: (screenTitle, displayText, displayTextColor, buttonText, showButton, isRTL, callback) => {},
+    stopScanner: () => {}
+}
+
+global.downloadManager = {
+    enqueue: () => { }
+}
+

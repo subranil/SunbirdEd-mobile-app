@@ -4,28 +4,12 @@
       <ion-icon slot="start" name="arrow-back" class="batches-header-text"></ion-icon>
     </ion-buttons>
     <ion-title class="batches-header-text font-size-20">
-      <strong>{{ 'BATCHES_FOR_THIS_COURSE' | translate }}</strong>
+      <strong>{{'FRMELEMNTS_LBL_BATCHES_FOR_THIS_COURSE' | categoryKeyTranslate : course}}</strong>
     </ion-title>
   </ion-toolbar>
 </ion-header>
 <!-- Page body -->
 <ion-content class="ion-padding" overflow-scroll="true">
-
-  <!-- <div class="my-overlay" padding *ngIf="showSignInCard"> 
-    <div class="guest-user-info" text-center>
-          <p> {{ 'OVERLAY_LABEL_TAKE_COURSE' | translate }} </p>
-          <br/>
-          <span>{{ 'OVERLAY_INFO_TEXT_TAKE_COURSE' | translate }} </span>
-          <br/>
-          <br/>
-          <button ion-button block (click)="signIn()">{{ 'OVERLAY_SIGN_IN' | translate }}</button>
-        </div>
-     <div class="guest-user-info" text-center>
-      <app-sign-in-card (valueChange)="buttonClick($event)" [source]="'course-batches'"
-        [title]="'OVERLAY_LABEL_TAKE_COURSE'" [description]="'OVERLAY_INFO_TEXT_TAKE_COURSE'"></app-sign-in-card>
-    </div>
-  </div> -->
-
   <div *ngIf="ongoingBatches && ongoingBatches.length">
     <div class="background-gray">
       <div class="width-100 batch-font" text-capitalize>
@@ -34,12 +18,12 @@
     </div>
 
     <div class="batch-list" padding-top>
-      <div *ngIf="ongoingBatches && ongoingBatches.length && !showLoader">
+      <div *ngIf="ongoingBatches && ongoingBatches.length">
         <div class="flex-card-container" *ngFor="let batch of ongoingBatches">
           <div class="card-text">
             <div class="batch-name">{{ batch.name }}</div>
             <span class="text-gray-color">
-              {{batch.startDate | date: 'mediumDate' }} - {{ batch.endDate | date: 'mediumDate' }}
+              {{batch.startDate | date: 'dd/MM/yyyy' }} - {{ batch.endDate | date: 'dd/MM/yyyy' }}
             </span>
             <p *ngIf="batch?.creatorDetails?.firstName">
               <span class="text-gray-color">{{ 'BATCH_CREATED_BY' | translate }}</span>&nbsp;
@@ -52,7 +36,7 @@
                 class="enroll-msg-ended">{{ 'BATCH_ENROLLMENT_ENDED' | translate}}</span>
               <ng-template #lastDateForEnrollment>
                 <span class="enroll-msg-style">{{'ENROLLMENT_LAST_DATE' | translate}}
-                  {{batch.enrollmentEndDate | date: 'mediumDate'}}</span>
+                  {{batch.enrollmentEndDate | date: 'dd/MM/yyyy'}}</span>
               </ng-template>
             </p>
           </div>
@@ -74,12 +58,12 @@
       </div>
     </div>
     <div class="batch-list" padding-top>
-      <div *ngIf="upcommingBatches && upcommingBatches.length && !showLoader">
+      <div *ngIf="upcommingBatches && upcommingBatches.length">
         <div class="flex-card-container" *ngFor="let batch of upcommingBatches">
           <div class="card-text">
             <div class="batch-name">{{ batch.name }}</div>
             <span class="text-gray-color">
-              {{batch.startDate | date: 'mediumDate' }} - {{ batch.endDate | date: 'mediumDate' }}
+              {{batch.startDate | date: 'dd/MM/yyyy' }} - {{ batch.endDate | date: 'dd/MM/yyyy' }}
             </span>
             <p *ngIf="batch?.creatorDetails?.firstName">
               <span class="text-gray-color">{{ 'BATCH_CREATED_BY' | translate }}</span>&nbsp;
@@ -92,7 +76,7 @@
                 class="enroll-msg-ended">{{ 'BATCH_ENROLLMENT_ENDED' | translate}}</span>
               <ng-template #lastDateForEnrollment>
                 <span class="enroll-msg-style">{{'ENROLLMENT_LAST_DATE' | translate}}
-                  {{batch.enrollmentEndDate | date: 'mediumDate'}}</span>
+                  {{batch.enrollmentEndDate | date: 'dd/MM/yyyy' }}</span>
               </ng-template>
             </p>
           </div>
@@ -107,14 +91,5 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <div *ngIf="showLoader">
-    <ion-row class="padding-top-30" padding>
-      <ion-col class="ion-text-center">
-        <p>{{ 'MSG_LOADING_BATCHES' | translate }}</p>
-        <ion-spinner padding></ion-spinner>
-      </ion-col>
-    </ion-row>
   </div>
 </ion-content>

@@ -6,7 +6,9 @@ export enum Environment {
     USER = 'user',
     SETTINGS = 'settings',
     ONBOARDING = 'onboarding',
-    NOTIFICATION = 'notification'
+    NOTIFICATION = 'notification',
+    GROUP = 'group',
+    PLAYER = 'player'
 }
 
 export enum ErrorCode {
@@ -23,11 +25,16 @@ export enum ObjectType {
     GROUP = 'Group',
     CONTENT = 'Content',
     QUESTION = 'Question',
-    QR = 'Qr'
+    QR = 'Qr',
+    TEXTBOOK = ' TextBook'
 }
+
 export enum Mode {
-    PLAY = 'play'
+    PLAY = 'play',
+    ONLINE = 'online',
+    OFFLINE = 'offline'
 }
+
 export enum PageId {
     SPLASH_SCREEN = 'splash',
     LOGIN = 'login',
@@ -46,6 +53,7 @@ export enum PageId {
     LIBRARY_SEARCH_FILTER = 'library-search-filter',
     COURSE_DETAIL = 'course-detail',
     COLLECTION_DETAIL = 'collection-detail',
+    CURRICULUM_COURSE_DETAIL = 'curriculum-course-detail',
     CONTENT_DETAIL = 'content-detail',
     COURSE_BATCHES = 'course-batches',
     SHARE_CONTENT = 'share-content',
@@ -66,23 +74,12 @@ export enum PageId {
     SETTINGS_DEVICE_TAGS = 'settings-device-tags',
     SETTINGS_SUPPORTS = 'settings-supports',
     SETTINGS_ABOUT_US = 'settings-about-us',
-    USERS_GROUPS = 'users-groups',
     CREATE_USER = 'create-profile',
     CREATE_GROUP = 'create-group',
-    CREATE_GROUP_SYLLABUS_CLASS = 'create-group-syllabusclass',
-    CREATE_GROUP_USER_SELECTION = 'create-group-userselection',
     GROUP_DETAIL = 'group-detail',
     GUEST_PROFILE = 'guest-profile',
     EDIT_USER = 'edit-user',
     EDIT_GROUP = 'edit-group',
-    ADD_GROUP_SYLLABUS_CLASS = 'add-group-syllabusclass',
-    ADD_GROUP_USER_SELECTION = 'add-group-userselection',
-    REMOVE_USERS_FROM_GROUP = 'remove-users-from-group',
-    SHARE_USER_GROUP = 'share-user-group',
-    REPORTS_USER_GROUP = 'reports-users-group',
-    REPORTS_ASSESMENT_CONTENT_LIST = 'assesment-content-list',
-    REPORTS_USER_ASSESMENT_DETAILS = 'user-assesment-details',
-    REPORTS_GROUP_ASSESMENT_DETAILS = 'group-assesment-details',
     ONBOARDING_LANGUAGE_SETTING = 'onboarding-language-setting',
     VIEW_MORE = 'view-more',
     DIAL_CODE_SCAN_RESULT = 'dial-code-scan-result',
@@ -125,13 +122,47 @@ export enum PageId {
     IMPORT_CONTENT_POPUP = 'import-content-popup',
     DOWNLOAD_ALL_CONFIRMATION_POPUP = 'download-all-confirmation-popup',
     PERMISSION_POPUP = 'permission-popup',
+    PLAYER_PAGE = 'player-page',
+    /* New Telemetry */
+    LANGUAGE = 'language',
+    USER_TYPE = 'usertype',
+    SCAN_OR_MANUAL = 'scan-or-manual',
+    PROFILE_SETTINGS = 'profile-settings',
+    POPUP_CATEGORY = 'popup-category',
     APP_PERMISSION_POPUP = 'app-permission-popup',
     STORAGE_SETTINGS = 'storage-settings',
-    APP_TUTORIAL_POPUP = 'app-tutorial-popup'
+    CREATE_MANAGED_USER = 'create-managed-user',
+    MANAGE_USERS = 'manage-users',
+    CHAPTER_DETAILS = 'chapter-details',
+    TEACHER_SELF_DECLARATION = 'teacher-self-declaration',
+    COURSE_LIST = 'course-list',
+    MANUAL_PROFILE = 'manual-profile',
+    SCAN = 'scan',
+    APP_TUTORIAL_POPUP = 'app-tutorial-popup',
+    COURSE_SEARCH_FILTER = 'course-search-filter',
+    QR_BOOK_RESULT = 'qr-book-result',
+    QR_CONTENT_RESULT = 'qr-content-result',
+    LOCATION = 'location',
+    MANUAL = 'manual',
+    COURSE_COMPLETION_POPUP = 'course-completion-popup',
+    PROFILE_NAME_CONFIRMATION_POPUP = 'profile-name-confirmation-popup',
+    MY_GROUP = 'my-group',
+    ADD_MEMBER = 'add-member',
+    ACTIVITY_DETAIL = 'activity-detail',
+    TEXTBOOK_IMPORT = 'textbookimport',
+    ACTIVITY_TOC = 'activity-toc',
+    ADD_ACTIVITY_TO_GROUP = 'add-activity-to-group',
+    PLANNED_MAINTENANCE_BANNER = 'planned-maintenance-banner',
+    FRAMEWORK_SELECTION = 'framework-selection',
+    RELEVANT_CONTENTS = 'relevant-contents',
+    PLAYER = 'player',
+    ADMIN_HOME = 'admin-home',
 }
+
 export enum LogType {
     NOTIFICATION = 'notification'
 }
+
 export enum LogLevel {
     TRACE = 'TRACE',
     DEBUG = 'DEBUG',
@@ -150,8 +181,14 @@ export enum ImpressionType {
     WORKFLOW = 'workflow',
     DISTRICT_MAPPING = 'district-mapping',
     CAMERA = 'camera',
-    FILE_MANAGEMENT = 'file-management'
+    FILE_MANAGEMENT = 'file-management',
+    /* New Telemetry */
+    PAGE_LOADED = 'page-loaded',
+    PAGE_REQUEST = 'page-request',
+    SET_LANGUAGE = 'set-language',
+    QR_REQUEST = 'qr-request'
 }
+
 export enum ImpressionSubtype {
     QRCodeScanInitiate = 'qr-code-scan-initiate',
     RATING_POPUP = 'rating-popup',
@@ -164,8 +201,14 @@ export enum ImpressionSubtype {
     RECOVERY_ACCOUNT_POPUP = 'recovery-account-popup',
     DISTRICT_LOCATION_MAPPING = 'district-location-mapping',
     UPGRADE_POPUP = 'upgrade-popup',
-    DEEPLINK = 'deeplink'
+    DEEPLINK = 'deeplink',
+    CREATE_GROUP_FORM = 'create-group-form',
+    DISPLAY_DIKSHA_ID_TUTORIAL = 'display-diksha-id-tutorial',
+    GROUP_TUTORIAL = 'my-group-tutorial-popup',
+    OFFLINE_MODE = 'offline-mode',
+    AUTO = 'auto'
 }
+
 export enum InteractType {
     TOUCH = 'TOUCH',
     OTHER = 'OTHER',
@@ -184,9 +227,39 @@ export enum InteractType {
     LOCAL = 'local',
     FCM = 'fcm',
     WITHOUT_CONTENT = 'without-content',
-    WITH_CONTENT = 'with-content'
+    WITH_CONTENT = 'with-content',
+    /* New Telemetry */
+    SELECT_LANGUAGE = 'select-language',
+    SELECT_CONTINUE = 'select-continue',
+    SELECT_USERTYPE = 'select-usertype',
+    SELECT_BACK = 'select-back',
+    SELECT_QRSCANER = 'select-qrscanner',
+    SELECT_CATEGORY = 'select-category',
+    SELECT_ATTRIBUTE = 'select-attribute',
+    SELECT_SUBMIT = 'select-submit',
+    SELECT_CANCEL = 'select-cancel',
+    SELECT_ADD = 'select-add',
+    SELECT_MORE = 'select-more',
+    SUBMISSION_INITIATED = 'submission-initiated',
+    SUBMISSION_SUCCESS = 'submission-success',
+    SUBMISSION_FAILURE = 'submission-failure',
+    CREATE_SUCCESS = 'create-success',
+    CREATE_FAILURE = 'create-failure',
+    SWITCH_SUCCESS = 'switch-success',
+    SWITCH_FAILURE = 'switch-failure',
+    QR_CAPTURED = 'qr-captured',
+    PLAY = 'play',
+    DOWNLOAD = 'download',
+    SELECT_CLOSE = 'select-close',
+    DOWNLOAD_COMPLETE = 'download-complete',
+    POPUP_LOADED = 'popup-loaded',
+    INITIATED = 'initiated',
+    SUCCESS = 'success',
+    FAILURE = 'failure',
+    SUPPORT = 'support',
+    SELECT_BOOK = 'select-book',
+    SELECT_CARD = 'select-card'
 }
-
 
 export enum InteractSubtype {
     PRINT_PDF_CLICKED = 'print-pdf-clicked',
@@ -212,7 +285,6 @@ export enum InteractSubtype {
     FILTER_BUTTON_CLICKED = 'filter-button-clicked',
     VIEWALL_CLICKED = 'view-all-clicked',
     BOOK_LIST_END_REACHED = 'book-list-end-reached',
-    RECENTLY_VIEWED_END_REACHED = 'recently-viewed-end-reached',
     SHARE_COURSE_INITIATED = 'share-course-initiated',
     SHARE_CONTENT_INITIATED = 'share-content-initiated',
     SHARE_COURSE_SUCCESS = 'share-course-success',
@@ -244,49 +316,23 @@ export enum InteractSubtype {
     DATA_SYNC_TYPE = 'data-sync-type-clicked',
     RATING_CLICKED = 'rating-clicked',
     RATING_SUBMITTED = 'rating-submitted',
-    CREATE_USER_CLICKED = 'create-user-clicked',
     CREATE_USER_INITIATED = 'create-user-initated',
     EDIT_USER_INITIATED = 'edit-user-initated',
     CREATE_USER_SUCCESS = 'create-user-success',
     EDIT_USER_SUCCESS = 'edit-user-success',
     CREATE_GROUP_CLICKED = 'create-group-clicked',
-    CREATE_GROUP_INITIATED = 'create-group-initated',
-    CREATE_GROUP_SUCCESS = 'create-group-success',
-    EDIT_GROUP_INITIATED = 'edit-group-initated',
     EDIT_GROUP_SUCCESS = 'edit-group-success',
-    SWITCH_USER_CLICKED = 'switch-user-clicked',
-    SWITCH_USER_INITIATE = 'switch-user-initiate',
-    SWITCH_USER_SUCCESS = 'switch-user-success',
-    DELETE_USER_INITIATE = 'delete-user-initiate',
-    DELETE_GROUP_INITIATE = 'delete-group-initiate',
-    DELETE_ALL_CLICKED = 'delete-from-device-button-clicked',
-    SHARE_USER_GROUP_INITIATE = 'share-usergroup-initiate',
-    SHARE_USER_GROUP_SUCCESS = 'share-usergroup-success',
-    USER_GROUP_CLICKED = 'users-groups-clicked',
-    REPORTS_CLICKED = 'reports-clicked',
-    USERS_TAB_CLICKED = 'users-tab-clicked',
-    GROUPS_TAB_CLICKED = 'groups-tab-clicked',
+    MY_GROUPS_CLICKED = 'my-groups-clicked',
     SUBMIT_CLICKED = 'submit-clicked',
     LOCATION_CAPTURED = 'location-captured',
     USER_CLICKED = 'user-clicked',
-    GROUP_CLICKED = 'group-clicked',
     CLASS_CLICKED = 'class-clicked',
     MEDIUM_CLICKED = 'medium-clicked',
     REFRESH_CLICKED = 'refresh-clicked',
-    REPORTS_BY_USER_CLICKED = 'byuser-tab-clicked',
-    REPORTS_BY_QUESTION_CLICKED = 'byquestion-tab-clicked',
-    REPORTS_SORTBY_QUESTION_CLICKED = 'sortby-question-clicked',
-    REPORTS_SORTBY_TIME_CLICKED = 'sortby-time-clicked',
-    REPORTS_SORTBY_RESULT_CLICKED = 'sortby-result-clicked',
-    REPORTS_SORTBY_USER_CLICKED = 'sortby-users-clicked',
-    REPORTS_SORTBY_SCORE_CLICKED = 'sortby-score-clicked',
-    REPORTS_SORTBY_MARKS_CLICKED = 'sortby-marks-clicked',
-    REPORTS_SORTBY_ACCURACY_CLICKED = 'sortby-accuracy-clicked',
-    QUESTION_CLICKED = 'question-clicked',
     INITIAL_CONFIG = 'initial-config',
     FILTER_CONFIG = 'filter-config',
     APPLY_FILTER_CLICKED = 'apply-filter-clicked',
-    PROFILE_ATTRIBUTE_CHANGED = 'profile_attribute_changed',
+    PROFILE_ATTRIBUTE_CHANGED = 'profile-attribute-changed',
     SAVE_CLICKED = 'save-clicked',
     FINISH_CLICKED = 'finish-clicked',
     DEVICE_BACK_CLICKED = 'device-back-clicked',
@@ -307,7 +353,6 @@ export enum InteractSubtype {
     READ_MORE_CLICKED = 'read-more-clicked',
     READ_LESS_CLICKED = 'read-less-clicked',
     DOWNLOAD_PLAY_CLICKED = 'download-play-clicked',
-    DOWNLOAD_REPORT_CLICKED = 'download-report-clicked',
     PLAY_CLICKED = 'play-clicked',
     EXTRA_INFO = 'extra-info',
     PROFILE_ATTRIBUTE_POPULATION = 'profile-attribute-population',
@@ -333,7 +378,7 @@ export enum InteractSubtype {
     SORT_OPTION_SELECTED = 'sort-options-selected',
     ACTION_BUTTON_CLICKED = 'action-button-clicked',
     OUTSIDE_POPUP_AREA_CLICKED = 'outside-popup-area-clicked',
-    POPUP_DISMISSED= 'popup-dismissed',
+    POPUP_DISMISSED = 'popup-dismissed',
     DOWNLOAD_CANCEL_ALL_CLICKED = 'download-cancel-all-clicked',
     DOWNLOAD_CERTIFICATE_CLICKED = 'download-certificate-clicked',
     DOWNLOAD_CANCEL_CLICKED = 'download-cancel-clicked',
@@ -406,9 +451,46 @@ export enum InteractSubtype {
     OPTIONAL_UPGRADE = 'optional-upgrade',
     DEEPLINK_UPGRADE = 'deep-link-upgrade',
     NO_QR_CODE_CLICKED = 'no-qr-code-clicked',
+    /* New Telemetry */
+    SUCCESS = 'success',
+    FAIL = 'fail',
+    UI = 'ui',
+    DEVICE = 'device',
     DENY_CLICKED = 'deny-clicked',
+    NEW = 'new',
+    EXISTING = 'existing',
+    SUBJECT_CARD_CLICKED = 'subject-card-clicked',
     INFORMATION_ICON_CLICKED = 'information-icon-clicked',
     TUTORIAL_CONTINUE_CLICKED = 'tutorial-continue-clicked',
+    SYNC_NOW_CLICKED = 'sync-now-clicked',
+    DOWNLOAD_REQUEST = 'download-request',
+    DOWLOAD_POPUP = 'download-popup',
+    DOWNLOAD = 'download',
+    CTA = 'cta',
+    CLOSE_ICON = 'close-icon',
+    OUTSIDE = 'outside',
+    QR_NOT_LINKED = 'qr-not-linked',
+    GROUP_CLICKED = 'group-clicked',
+    ADD_MEMBER_CLICKED = 'add-member-clicked',
+    ADD_ACTIVITY_CLICKED = 'add-activity-clicked',
+    ACTIVITY_TYPE_CLICKED = 'activity-type-clicked',
+    SELECT_NESTED_ACTIVITY_CLICKED = 'select-nested-activity-clicked',
+    DELETE_GROUP_CLICKED = 'delete-group-clicked',
+    LEAVE_GROUP_CLICKED = 'leave-group-clicked',
+    MAKE_GROUP_ADMIN_CLICKED = 'make-group-admin-clicked',
+    DISMISS_GROUP_ADMIN_CLICKED = 'dismiss-group-admin-clicked',
+    REMOVE_MEMBER_CLICKED = 'remove-member-clicked',
+    REMOVE_ACTIVITY_CLICKED = 'remove-activity-clicked',
+    VERIFY_CLICKED = 'verify-clicked',
+    ADD_MEMBER_TO_GROUP_CLICKED = 'add-member-to-group-clicked',
+    ADD_TO_GROUP_CLICKED = 'add-to-group-clicked',
+    ACTIVITY_TAB_CLICKED = 'activity-tab-clicked',
+    MEMBER_TAB_CLICKED = 'member-tab-clicked',
+    EDIT_GROUP_CLICKED = 'edit-group-clicked',
+    LET_US_KNOW_CLICKED = 'let-us-know-clicked',
+    DOWNLOAD_PDF_CLICKED = 'download-pdf-clicked',
+    DEACTIVATE_GROUP_CLICKED = 'deactivate-group-clicked',
+    REACTIVATE_GROUP_CLICKED = 'reactivate-group-clicked'
 }
 
 export enum ID {
@@ -430,7 +512,33 @@ export enum ID {
     BACKDROP_CLICKED = 'backdrop-clicked',
     CANCEL_CLICKED = 'cancel-clicked',
     NOTIFICATION_CLICKED = 'notification-clicked',
-    SEE_MORE_CONTENT_BUTTON_CLICKED = 'see-more-content-button-clicked'
+    NOTIFICATION_RECEIVED = 'notification-received',
+    SEE_MORE_CONTENT_BUTTON_CLICKED = 'see-more-content-button-clicked',
+    BTN_CANCEL = 'btn-cancel',
+    BTN_ADD = 'btn-add',
+    BTN_SWITCH = 'btn-switch',
+    BTN_MORE = 'btn-more',
+    BTN_UPDATE = 'btn-update',
+    BTN_I_AM_A_TEACHER = 'btn-i-am-a-teacher',
+    TEACHER_DECLARATION = 'teacher-declaration',
+    MUA_USER_CREATION = 'mua-user-creation',
+    DATA_SHARING = 'data-sharing',
+    VALIDATE_EMAIL = 'validate-email',
+    VALIDATE_MOBILE = 'validate-mobile',
+    CREATE_GROUP = 'create-group',
+    DELETE_GROUP = 'delete-group',
+    LEAVE_GROUP = 'leave-group',
+    MAKE_GROUP_ADMIN = 'make-group-admin',
+    DISMISS_GROUP_ADMIN = 'dismiss-group-admin',
+    REMOVE_MEMBER = 'remove-member',
+    REMOVE_ACTIVITY = 'remove-activity',
+    VERIFY_MEMBER = 'verify-member',
+    ADD_MEMBER_TO_GROUP = 'add-member-to-group',
+    ADD_ACTIVITY_TO_GROUP = 'add-activity-to-group',
+    NOTIFICATION_REQUEST = 'notification-request',
+    DEACTIVATE_GROUP= 'deactivate-group',
+    REACTIVATE_GROUP= 'reactivate-group',
+    ACCEPT_GROUP_GUIDELINES= 'accept-group-guidelines'
 }
 
 export enum ActionButtonType {
@@ -455,7 +563,53 @@ export enum CorReleationDataType {
     ACCESS_TYPE = 'AccessType',
     SCAN = 'Scan',
     SOURCE = 'Source',
-    NOTIFICATION_ID = 'NotificationID'
+    NOTIFICATION_ID = 'NotificationId',
+    NOTIFICATION_RECEIVED_AT = 'NotificationReceivedAt',
+    GROUP_ID = 'GroupId',
+    CONTENT_TYPE = 'ContentType',
+    ACTIVITY_TYPE = 'ActivityType',
+    /* New Telemetry for Telemetry Structure change
+    * for old telemetry structure please add in above
+    */
+    BOARD_COUNT = 'CountBoard',
+    MEDIUM_COUNT = 'CountMedium',
+    CLASS_COUNT = 'CountClass',
+    FIRST_TIME_USER = 'FirstTimeUser',
+    NAME = 'Name',
+    TNC_VERSION = 'TncVersion',
+    LIUA = 'Liua',
+    SWITCHED_USER = 'SwitchedUser',
+    NEW_VALUE = 'NewValue',
+    OLD_VALUE = 'OldValue',
+    COURSE_COUNT = 'CourseCount',
+    CHILD_UI = 'ChildUi',
+    QR = 'QR',
+    COUNT_BOOK = 'CountBook',
+    COUNT_CONTENT = 'CountContent',
+    FROM_PAGE = 'FromPage',
+    LANGUAGE = 'Language',
+    MODE = 'Mode',
+    TYPE = 'Type',
+    STATE = 'State',
+    DISTRICT = 'District',
+    FILL_MODE = 'FillMode',
+    CATEGORY = 'Category',
+    SUBCATEGORY = 'Subcategory',
+    COUNT_NODE = 'CountNode',
+    CONTENT_NAME = 'ContentName'
 }
 
+export enum AuditProps {
+    LANGUAGE = 'language',
+    PROFILE_TYPE = 'profile_type'
+}
 
+export enum AuditType {
+    SET_LANGUAGE = 'set-language',
+    SELECT_USERTYPE = 'set-usertype',
+    SET_PROFILE = 'set-profile',
+    UNIT_PROGRESS = 'unit-progress',
+    COURSE_PROGRESS = 'course-progress',
+    TOAST_SEEN = 'toast-seen',
+    TNC_DATA_SHARING = 'tnc-data-sharing'
+}

@@ -9,7 +9,6 @@ import {
   ContentImportRequest,
   ContentImportResponse,
   ContentImportStatus,
-  ContentRequest,
   ContentSearchCriteria,
   ContentSearchResult,
   ContentService,
@@ -41,18 +40,17 @@ import {
   CorReleationDataType
 } from '@app/services/telemetry-constants';
 import {
-  ContentType, ViewMore, MimeType, RouterLinks, ContentFilterConfig,
+  ViewMore, MimeType, RouterLinks,
   ContentCard, BatchConstants, PreferenceKey
 } from '@app/app/app.constant';
-import { FormAndFrameworkUtilService } from '@app/services/formandframeworkutil.service';
 import { CourseUtilService } from '@app/services/course-util.service';
 import { TelemetryGeneratorService } from '@app/services/telemetry-generator.service';
 import { CommonUtilService } from '@app/services/common-util.service';
 import { AppHeaderService } from '@app/services/app-header.service';
 import { EnrollmentDetailsComponent } from '../components/enrollment-details/enrollment-details.component';
 import { AppGlobalService } from '@app/services/app-global-service.service';
-import { LocalCourseService } from '@app/services/local-course.service';
 import { ContentUtil } from '@app/util/content-util';
+import { NavigationService } from '@app/services/navigation-handler.service';
 
 @Component({
   selector: 'app-view-more-activity',
@@ -76,11 +74,6 @@ export class ViewMoreActivityComponent implements OnInit {
   loadMoreBtn = true;
 
   /**
-   * Flag to show / hide downloads only button
-   */
-  showDownloadsOnlyToggle = false;
-
-  /**
    * value for downloads only toggle button, may have true/false
    */
   downloadsOnlyToggle = false;
@@ -92,10 +85,8 @@ export class ViewMoreActivityComponent implements OnInit {
   /**
    * Flag to switch between view-more-card in view
    */
-  localContentsCard = false;
   backButtonFunc: Subscription;
   headerTitle: string;
-  private corRelationList: Array<CorrelationData>;
   pageType = 'library';
   source = '';
   queuedIdentifiers: Array<any> = [];
@@ -106,8 +97,6 @@ export class ViewMoreActivityComponent implements OnInit {
   audience: any;
   defaultImg: string;
   private eventSubscription: Subscription;
-  // adding for ETBV2 integration, to show saved resources after recentlyViewed
-  savedResources: Array<any>;
   enrolledCourses: any;
   guestUser: any;
   userId: any;
@@ -155,16 +144,14 @@ export class ViewMoreActivityComponent implements OnInit {
     private location: Location,
     private platform: Platform,
     private zone: NgZone,
-    private formAndFrameworkUtilService: FormAndFrameworkUtilService,
     private appGlobalService: AppGlobalService,
     private popoverCtrl: PopoverController,
-    private localCourseService: LocalCourseService
+    private navService: NavigationService
   ) {
     this.route.queryParams.subscribe(params => {
       if (this.router.getCurrentNavigation().extras.state) {
         console.log('params from state : ', this.router.getCurrentNavigation().extras.state);
         this.uid = this.router.getCurrentNavigation().extras.state.uid;
-        this.showDownloadsOnlyToggle = this.router.getCurrentNavigation().extras.state.showDownloadOnlyToggle;
         this.title = this.router.getCurrentNavigation().extras.state.headerTitle;
         this.userId = this.router.getCurrentNavigation().extras.state.userId;
         this.pageName = this.router.getCurrentNavigation().extras.state.pageName;
@@ -214,16 +201,6 @@ export class ViewMoreActivityComponent implements OnInit {
   }
 
   subscribeUtilityEvents() {
-    this.events.subscribe('savedResources:update', async (res) => {
-      if (res && res.update) {
-        if (this.pageName === ViewMore.PAGE_RESOURCE_SAVED) {
-          this.getLocalContents(false, this.downloadsOnlyToggle, true);
-        } else if (this.pageName === ViewMore.PAGE_RESOURCE_RECENTLY_VIEWED) {
-          await this.getLocalContents(true, this.downloadsOnlyToggle, true);
-        }
-      }
-    });
-
     this.events.subscribe('viewMore:Courseresume', (data) => {
       this.resumeContentData = data.content;
       this.getContentDetails(data.content);
@@ -297,26 +274,17 @@ export class ViewMoreActivityComponent implements OnInit {
       case ViewMore.PAGE_COURSE_ENROLLED:
         this.pageType = 'enrolledCourse';
         this.loadMoreBtn = false;
-        this.localContentsCard = false;
         this.getEnrolledCourse();
         break;
 
       case ViewMore.PAGE_COURSE_POPULAR:
         this.pageType = 'popularCourses';
-        this.localContentsCard = false;
         this.search();
         break;
 
-      case ViewMore.PAGE_RESOURCE_SAVED:
-        this.loadMoreBtn = false;
-        this.localContentsCard = true;
-        this.getLocalContents();
-        break;
-
-      case ViewMore.PAGE_RESOURCE_RECENTLY_VIEWED:
-        this.loadMoreBtn = false;
-        this.localContentsCard = true;
-        await this.getLocalContents(true);
+      case ViewMore.PAGE_TV_PROGRAMS:
+        this.pageType = 'tvPrograms';
+        this.search();
         break;
 
       default:
@@ -349,82 +317,6 @@ export class ViewMoreActivityComponent implements OnInit {
       .catch((error: any) => {
         console.error('error while loading enrolled courses', error);
         this.isLoading = false;
-      });
-  }
-
-  /**
-   * Get local content
-   */
-  async getLocalContents(recentlyViewed?: boolean, downloaded?: boolean, hideLoaderFlag?: boolean) {
-    const loader = await this.commonUtilService.getLoader();
-    if (!hideLoaderFlag) {
-      await loader.present();
-    }
-
-    let contentTypes;
-    if (recentlyViewed) {
-      contentTypes = [];
-    } else {
-      contentTypes = await this.formAndFrameworkUtilService.getSupportedContentFilterConfig(
-        ContentFilterConfig.NAME_LIBRARY);
-    }
-
-    const requestParams: ContentRequest = {
-      uid: this.uid,
-      audience: this.audience,
-      recentlyViewed,
-      localOnly: downloaded,
-      contentTypes,
-      limit: recentlyViewed ? 20 : 0
-    };
-    this.contentService.getContents(requestParams).toPromise()
-      .then(data => {
-        const contentData = [];
-        data.forEach((value) => {
-          value.contentData['lastUpdatedOn'] = value.lastUpdatedTime;
-          if (value.contentData.appIcon) {
-            if (value.contentData.appIcon.includes('http:') || value.contentData.appIcon.includes('https:')) {
-              if (this.commonUtilService.networkInfo.isNetworkAvailable) {
-                value.contentData.appIcon = value.contentData.appIcon;
-              } else {
-                value.contentData.appIcon = this.defaultImg;
-              }
-            } else if (value.basePath) {
-              value.contentData.appIcon = value.basePath + '/' + value.contentData.appIcon;
-            }
-          }
-          contentData.push(value);
-          // if saved resources are available
-        });
-        this.ngZone.run(() => {
-          if ((this.pageName === ViewMore.PAGE_RESOURCE_RECENTLY_VIEWED) && recentlyViewed) {
-            this.searchList = contentData;
-          }
-          //
-          if ((this.pageName === ViewMore.PAGE_RESOURCE_RECENTLY_VIEWED) && !recentlyViewed) {
-            this.savedResources = contentData;
-            for (let i = 0; i < this.searchList.length; i++) {
-              const index = this.savedResources.findIndex((el) => {
-                return el.identifier === this.searchList[i].identifier;
-              });
-
-              if (index !== -1) {
-                this.savedResources.splice(index, 1);
-              }
-            }
-            this.searchList.push(...this.savedResources);
-          }
-          console.log('content data is =>', contentData);
-          if (!hideLoaderFlag) {
-            loader.dismiss();
-          }
-          this.loadMoreBtn = false;
-        });
-      })
-      .catch(async () => {
-        if (!hideLoaderFlag) {
-          await loader.dismiss();
-        }
       });
   }
 
@@ -577,9 +469,6 @@ export class ViewMoreActivityComponent implements OnInit {
     if (!content.isAvailableLocally && !this.commonUtilService.networkInfo.isNetworkAvailable) {
       return false;
     }
-    const identifier = content.contentId || content.identifier;
-    const type = this.telemetryGeneratorService.isCollection(content.mimeType) ? content.contentType : ContentType.RESOURCE;
-    const telemetryObject: TelemetryObject = new TelemetryObject(identifier, type, content.pkgVersion);
 
     const values = new Map();
     values['sectionName'] = this.sectionName;
@@ -589,17 +478,9 @@ export class ViewMoreActivityComponent implements OnInit {
       InteractSubtype.CONTENT_CLICKED,
       this.env,
       this.pageName ? this.pageName : this.layoutName,
-      telemetryObject,
+      ContentUtil.getTelemetryObject(content),
       values);
-    if (content.mimeType === MimeType.COLLECTION) {
-      this.router.navigate([RouterLinks.COLLECTION_DETAIL_ETB], {
-        state: { content }
-      });
-    } else {
-      this.router.navigate([RouterLinks.CONTENT_DETAILS], {
-        state: { content }
-      });
-    }
+    this.navService.navigateToDetailPage(content, { content });
   }
 
   getContentImg(content) {
@@ -650,7 +531,7 @@ export class ViewMoreActivityComponent implements OnInit {
       filters: {
         courseId: layoutName === ContentCard.LAYOUT_INPROGRESS ? content.contentId : content.identifier,
         enrollmentType: CourseEnrollmentType.OPEN,
-        status: [CourseBatchStatus.NOT_STARTED, CourseBatchStatus.IN_PROGRESS]
+        status: [CourseBatchStatus.IN_PROGRESS]
       },
       sort_by: { createdDate: SortOrder.DESC },
       fields: BatchConstants.REQUIRED_FIELDS
@@ -687,7 +568,7 @@ export class ViewMoreActivityComponent implements OnInit {
                     upcommingBatches,
                     ongoingBatches,
                     retiredBatches,
-                    courseId: content.identifier
+                    content
                   },
                   cssClass: 'enrollement-popover'
                 });
@@ -718,9 +599,6 @@ export class ViewMoreActivityComponent implements OnInit {
 
   private async navigateToDetailsPage(content: any, layoutName) {
     const identifier = content.contentId || content.identifier;
-    const type = this.telemetryGeneratorService.isCollection(content.mimeType) ? content.contentType : ContentType.COURSE;
-    const telemetryObject: TelemetryObject = new TelemetryObject(identifier, type, content.pkgVersion);
-
     const corRelationList: Array<CorrelationData> = [{
       id: this.sectionName,
       type: CorReleationDataType.SECTION
@@ -737,25 +615,19 @@ export class ViewMoreActivityComponent implements OnInit {
       InteractSubtype.CONTENT_CLICKED,
       this.env,
       PageId.VIEW_MORE,
-      telemetryObject,
+      ContentUtil.getTelemetryObject(content),
       values,
       ContentUtil.generateRollUp(undefined, identifier),
       this.commonUtilService.deDupe(corRelationList, 'type'));
 
     this.zone.run(async () => {
-      if (layoutName === 'enrolledCourse' || content.contentType === ContentType.COURSE) {
-        this.router.navigate([RouterLinks.ENROLLED_COURSE_DETAILS], {
-          state: { content }
-        });
-      } else if (content.mimeType === MimeType.COLLECTION) {
-        this.router.navigate([RouterLinks.COLLECTION_DETAIL_ETB], {
-          state: { content }
-        });
-
+      if (layoutName === 'enrolledCourse') {
+        this.navService.navigateToTrackableCollection({ content });
       } else {
-        this.router.navigate([RouterLinks.CONTENT_DETAILS], {
-          state: { content }
-        });
+        this.navService.navigateToDetailPage(
+          content,
+          { content }
+        );
       }
     });
   }

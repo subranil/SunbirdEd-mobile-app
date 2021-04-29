@@ -1,5 +1,6 @@
 @import "src/assets/styles/base/_variables.scss";
 @import "src/assets/styles/_custom-mixins";
+@import "src/assets/styles/_variables.scss";
 :host {
   .clear-btn {
     @include rtl {
@@ -9,16 +10,13 @@
       float: right !important;
     }
     padding-top: 10px;
+    color: #e0005a
   }
   .sb-view-all-title {
     width: inherit;
   }
   .scroll-content {
     padding-bottom: 80px;
-  }
-
-  ion-content {
-    --background: #d9e5f0;
   }
 
   ion-list.list-md {
@@ -62,7 +60,7 @@
     h4 {
       height: 22px;
       color: $gray-200;
-      font-family: "Noto Sans";
+      font-family: "Noto Sans", sans-serif;
       font-size: 16px;
       font-weight: bold;
       line-height: 22px;
@@ -73,8 +71,16 @@
       width: 80vw;
     }
   }
-  .delete-button {
-    height: 100%;
-    --border-radius: none;
+
+  .delete-button-left {
+    height: auto;
+    margin: 0 !important;
+    --border-radius: 0 0.5rem 0.5rem 0 !important;
+  }
+
+  .delete-button-right {
+    height: auto;
+    margin: 0 !important;
+    --border-radius: 0.5rem 0 0 0.5rem !important;
   }
 }

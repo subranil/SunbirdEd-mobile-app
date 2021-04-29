@@ -1,36 +1,52 @@
 @import "src/assets/styles/_variables";
 @import "src/assets/styles/_custom-mixins";
 @import "src/assets/styles/fonts";
+@import "src/assets/styles/_variables.scss";
 
-ion-content {
-  --ion-background-color: #EDF4F9;
-}
 :host {
   /* This should be item-ios only as we are targeting mode as iOS for radio-button */
 
-  img.arrow-icon{
+  img.arrow-icon {
     display: inline-block;
     width: 22px;
     margin-top: -3px;
+    float: right;
+
     &.animate {
       position: relative;
       animation: dropDown 5s linear infinite;
       animation-duration: 0.9s;
     }
+
     @include rtl {
-
       transform: rotate(180deg);
-    }
-    @include ltr {
-
+      float: left !important;
     }
   }
+
+  button span {
+    width: 100%;
+    display: inline-block;
+
+    position: absolute;
+
+    top: 50%;
+    left: 50%;
+
+    transform: translate(-50%, -50%);
+  }
+
   @keyframes dropDown {
-    0% {right: 0;}
-    50% {right: 10px;}
-    100% {right: 0;}
+    0% {
+      right: 0;
+    }
+    50% {
+      right: 10px;
+    }
+    100% {
+      right: 0;
+    }
   }
-
   .gray-color {
     color: #{map-get($colors, secondary_black)};
     font-size: 1rem;
@@ -42,41 +58,50 @@ ion-content {
   }
 }
 
+.language-container {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
 
 .language-card {
-  text-align: center;
+  box-sizing: border-box;
+  width: 50%;
+  height: 136px;
+  padding: 5%;
+  border-radius: 16px;
+}
+
+.selected-lang {
+  .language-selection {
+    background-color: var(--app-primary) !important;
+  }
+  .label-text {
+    color: var(--app-white) !important;
+  }
+}
+
+.language-card label {
   position: relative;
-  margin-bottom: 0;
-  box-shadow: 0 20px 40px -10px #D8D8D8;
-  background-color: #FFFFFF;
-  ion-radio {
-    display: none;
-  }
-  ion-label {
-    padding-top: 32px;
-    padding-bottom: 32px;
-    font-size: 20px;
-    display: inline-block;
-    width: 100%;
-    text-align: center;
-  }
-  &.selected {
-    background-color: #0076FE;
-    box-shadow: 0 20px 40px -10px rgba(2,79,157,0.3);
-    ion-label {
-      color: white;
-    }
-    ion-radio {
-      display: block;
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      background: white;
-      border-radius: 100%;
-      width: 16px;
-      height: 16px;
-    }
-  }
+  box-shadow: 0 20px 40px -10px map-get($colors, light_silver);
+  background-color: map-get($colors, white);
+  display: inline-block;
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  text-align: center;
+}
+
+.language-card span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  font-size: 20px;
+  transform: translate(-50%, -50%);
+}
+
+.language-card input {
+  display: none;
 }
 .continue {
   position: fixed;
@@ -89,7 +114,16 @@ ion-content {
 .app-title {
   font-size: 24px;
   font-weight: bold;
-  color: #024F9D;
+  color: $blue;
   margin-top: 5vh;
+}
+
+.icon-check {
+  visibility: visible;
+  width: auto;
+  height: auto;
+  float: right;
+  margin-top: 7px;
+  margin-right: 11px;
 }
 

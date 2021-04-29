@@ -6,21 +6,18 @@ import { CommonUtilService } from '@app/services/common-util.service';
 import { AppGlobalService, } from '@app/services/app-global-service.service';
 import { AppHeaderService, } from '@app/services/app-header.service';
 import { FormAndFrameworkUtilService, } from '@app/services/formandframeworkutil.service';
-import { Environment, InteractType, PageId, InteractSubtype, ImpressionType } from '@app/services/telemetry-constants';
+import { Environment, InteractType, PageId, InteractSubtype, ImpressionType, CorReleationDataType } from '@app/services/telemetry-constants';
 import {
-  ProfileService,
-  ContentService,
-  DeviceInfo,
   SharedPreferences,
   TelemetryObject,
   GetSystemSettingsRequest,
   SystemSettingsService,
   SystemSettings,
   FaqService,
-  GetFaqRequest
+  GetFaqRequest,
+  CorrelationData,
 } from 'sunbird-sdk';
 import { PreferenceKey, appLanguages, RouterLinks } from '../app.constant';
-import { SocialSharing } from '@ionic-native/social-sharing/ngx';
 import { Location } from '@angular/common';
 import { AppVersion } from '@ionic-native/app-version/ngx';
 import { TranslateService } from '@ngx-translate/core';
@@ -61,16 +58,13 @@ export class FaqHelpPage implements OnInit {
   jsonURL: any;
   textValue: any;
   value: any;
+  corRelation: Array<CorrelationData> = [];
   constructor(
     @Inject('SHARED_PREFERENCES') private preferences: SharedPreferences,
-    @Inject('PROFILE_SERVICE') private profileService: ProfileService,
-    @Inject('CONTENT_SERVICE') private contentService: ContentService,
-    @Inject('DEVICE_INFO') private deviceInfo: DeviceInfo,
     @Inject('SYSTEM_SETTINGS_SERVICE') private systemSettingsService: SystemSettingsService,
     @Inject('FAQ_SERVICE') private faqService: FaqService,
     private domSanitizer: DomSanitizer,
     private telemetryGeneratorService: TelemetryGeneratorService,
-    private socialSharing: SocialSharing,
     private commonUtilService: CommonUtilService,
     private appGlobalService: AppGlobalService,
     private headerService: AppHeaderService,
@@ -83,6 +77,15 @@ export class FaqHelpPage implements OnInit {
     private router: Router,
     private zone: NgZone
   ) {
+    this.getNavParam();
+  }
+
+  private getNavParam() {
+    const navExtras = this.router.getCurrentNavigation().extras && this.router.getCurrentNavigation().extras.state;
+    if (navExtras) {
+      this.corRelation = navExtras.corRelation || [];
+      this.corRelation.push({ id: PageId.FAQ, type: CorReleationDataType.FROM_PAGE });
+    }
   }
 
   ngOnInit() {
@@ -100,7 +103,12 @@ export class FaqHelpPage implements OnInit {
       ImpressionType.VIEW,
       '',
       PageId.FAQ,
-      Environment.USER);
+      Environment.USER,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      this.corRelation);
   }
 
   receiveMessage(event) {
@@ -110,10 +118,6 @@ export class FaqHelpPage implements OnInit {
     if (event.data && event.data.action && event.data.action !== 'initiate-email-clicked') {
       this.generateInteractTelemetry(event.data.action, values);
     }
-  }
-
-  public getJSON(): Observable<any> {
-    return this.http.get(this.jsonURL);
   }
 
   private async getSelectedLanguage() {
@@ -130,7 +134,6 @@ export class FaqHelpPage implements OnInit {
     };
     await this.systemSettingsService.getSystemSettings(getSystemSettingsRequest).toPromise()
       .then((res: SystemSettings) => {
-        console.log('faqdata', res);
         faqRequest.faqUrl = res.value;
       }).catch(err => {
       });
@@ -143,7 +146,7 @@ export class FaqHelpPage implements OnInit {
     }
 
     this.faqService.getFaqDetails(faqRequest).subscribe(data => {
-      this.zone.run( () => {
+      this.zone.run(() => {
         this.data = data;
         this.constants = this.data.constants;
         this.faqs = this.data.faqs;
@@ -228,6 +231,7 @@ export class FaqHelpPage implements OnInit {
   }
 
   generateInteractTelemetry(interactSubtype, values) {
+    values.values.value.description = values.values.value.description.replace(/(<([^>]+)>)/ig, '');
     this.telemetryGeneratorService.generateInteractTelemetry(
       InteractType.TOUCH, interactSubtype,
       Environment.USER,
@@ -312,16 +316,20 @@ export class FaqHelpPage implements OnInit {
     this.textValue = '';
   }
 
-  navigateToReportIssue() {
+  async navigateToReportIssue() {
     this.telemetryGeneratorService.generateInteractTelemetry(InteractType.TOUCH,
       InteractSubtype.REPORT_ISSUE_CLICKED,
       Environment.USER,
       PageId.FAQ,
       undefined,
       undefined);
+
+    const formConfig = await this.formAndFrameworkUtilService.getFormConfig();
+    this.appGlobalService.formConfig = formConfig;
     this.router.navigate([RouterLinks.FAQ_REPORT_ISSUE], {
       state: {
-        data: this.data
+        data: this.data,
+        corRelation: this.corRelation
       }
     });
   }

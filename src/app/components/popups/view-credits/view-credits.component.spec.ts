@@ -3,7 +3,7 @@ import { PopoverController, Platform, NavParams } from '@ionic/angular';
 import { TelemetryGeneratorService } from '../../../../services/telemetry-generator.service';
 import { PageId, InteractSubtype, Environment, InteractType } from '@app/services/telemetry-constants';
 
-describe('UpgradePopoverComponent', () => {
+describe('ViewCreditsComponent', () => {
     let viewCreditsComponent: ViewCreditsComponent;
 
     const mockNavParams: Partial<NavParams> = {
@@ -15,6 +15,7 @@ describe('UpgradePopoverComponent', () => {
                         identifier: 'do_123',
                         pkgVersion: '1',
                         contentType: 'Resource',
+                        primaryCategory: 'Learning Resource',
                         creator: 'SAMPLE_CREATOR',
                         creators: 'SAMPLE_CREATORS'
                     };
@@ -86,7 +87,7 @@ describe('UpgradePopoverComponent', () => {
             InteractSubtype.CREDITS_CLICKED,
             Environment.HOME,
             PageId.CONTENT_DETAIL,
-            { id: 'do_123', type: 'Resource', version: '1'},
+            { id: 'do_123', type: 'Learning Resource', version: '1'},
             undefined,
             {l1: 'do_1', l2: 'do_2'},
             undefined);
@@ -102,6 +103,15 @@ describe('UpgradePopoverComponent', () => {
         // assert
         expect(mockPopOverController.dismiss).toHaveBeenCalled();
         expect(viewCreditsComponent.backButtonFunc.unsubscribe).toHaveBeenCalled();
+    });
+
+    it('should dissmiss popup on cancel', () => {
+        // arrange
+        viewCreditsComponent.backButtonFunc = undefined;
+        // act
+        viewCreditsComponent.cancel();
+        // assert
+        expect(viewCreditsComponent.backButtonFunc).toBeFalsy();
     });
 
     it('should return merged properties ', () => {

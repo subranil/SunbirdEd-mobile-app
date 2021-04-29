@@ -6,25 +6,62 @@ import {
     TelemetryErrorRequest,
     TelemetryImpressionRequest,
     TelemetryInteractRequest,
+    TelemetryAuditRequest,
     TelemetryLogRequest,
     TelemetryObject,
     TelemetryService,
     TelemetryStartRequest,
     TelemetryInterruptRequest,
-    DeviceSpecification
+    DeviceSpecification,
+    Actor,
+    AuditState
 } from 'sunbird-sdk';
 import { Map } from '../app/telemetryutil';
-import { Environment, ImpressionType, InteractSubtype, InteractType, Mode, PageId, CorReleationDataType, ID } from './telemetry-constants';
+import { Environment, ImpressionType, InteractSubtype, InteractType,
+    Mode, PageId, CorReleationDataType, ID, ImpressionSubtype } from './telemetry-constants';
 import { MimeType } from '../app/app.constant';
 import { ContentUtil } from '@app/util/content-util';
+import { SbProgressLoader } from '../services/sb-progress-loader.service';
 
 @Injectable()
 export class TelemetryGeneratorService {
-    constructor(@Inject('TELEMETRY_SERVICE') private telemetryService: TelemetryService) {
+    constructor(
+        @Inject('TELEMETRY_SERVICE') private telemetryService: TelemetryService,
+        private sbProgressLoader: SbProgressLoader,
+    ) {
+    }
+
+    generateAuditTelemetry(env, currentSate?, updatedProperties?, type?, objId?, objType?, objVer?, correlationData?, objRollup?) {
+        const telemetryAuditRequest: TelemetryAuditRequest = {
+            env: env ? env : undefined,
+            currentState: currentSate ? currentSate : undefined,
+            updatedProperties: updatedProperties ? updatedProperties : undefined,
+            type: type ? type : undefined,
+            objId: objId ? objId : undefined,
+            objType: objType ? objType : undefined,
+            objVer: objVer ? objVer : undefined,
+            rollUp: objRollup || {},
+            correlationData: correlationData ? correlationData : undefined,
+            actor: new Actor()
+        };
+        this.telemetryService.audit(telemetryAuditRequest).subscribe();
     }
 
     generateInteractTelemetry(interactType, interactSubtype, env, pageId, object?: TelemetryObject, values?: Map,
                               rollup?: Rollup, corRelationList?: Array<CorrelationData>, id?: string) {
+        const hash: string =
+            JSON.stringify({ pageId: pageId || undefined });
+        if (
+            Array.from(this.sbProgressLoader.contexts.entries()).some(([_, context]) => {
+                if (context.ignoreTelemetry && context.ignoreTelemetry.when && context.ignoreTelemetry.when.interact) {
+                    return !!hash.match(context.ignoreTelemetry.when.interact);
+                }
+                return false;
+            })
+        ) {
+            return;
+        }
+
         const telemetryInteractRequest = new TelemetryInteractRequest();
         telemetryInteractRequest.type = interactType;
         telemetryInteractRequest.subType = interactSubtype;
@@ -55,12 +92,25 @@ export class TelemetryGeneratorService {
         this.telemetryService.interact(telemetryInteractRequest).subscribe();
     }
 
-    generateImpressionTelemetry(type, subtype, pageid, env, objectId?: string, objectType?: string,
-        objectVersion?: string, rollup?: Rollup, corRelationList?: Array<CorrelationData>) {
+    generateImpressionTelemetry(type, subtype, pageId, env, objectId?: string, objectType?: string,
+                                objectVersion?: string, rollup?: Rollup, corRelationList?: Array<CorrelationData>) {
+        const hash: string =
+            JSON.stringify({ pageId: pageId || undefined });
+        if (
+            Array.from(this.sbProgressLoader.contexts.entries()).some(([_, context]) => {
+                if (context.ignoreTelemetry && context.ignoreTelemetry.when && context.ignoreTelemetry.when.impression) {
+                    return !!hash.match(context.ignoreTelemetry.when.impression);
+                }
+                return false;
+            })
+        ) {
+            return;
+        }
+
         const telemetryImpressionRequest = new TelemetryImpressionRequest();
         telemetryImpressionRequest.type = type;
         telemetryImpressionRequest.subType = subtype;
-        telemetryImpressionRequest.pageId = pageid || PageId.HOME;
+        telemetryImpressionRequest.pageId = pageId || PageId.HOME;
         telemetryImpressionRequest.env = env;
         telemetryImpressionRequest.objId = objectId ? objectId : '';
         telemetryImpressionRequest.objType = objectType ? objectType : '';
@@ -175,7 +225,6 @@ export class TelemetryGeneratorService {
             values,
             objRollup,
             corRelationList);
-
     }
 
     generatePageViewTelemetry(pageId, env, subType?) {
@@ -188,8 +237,7 @@ export class TelemetryGeneratorService {
         const values = new Map();
         values['isFirstTime'] = isFirstTime;
         values['size'] = content.size;
-        const telemetryObject = new TelemetryObject(content.identifier || content.contentId,
-            content.contentData ? content.contentData.contentType : content.contentType, content.contentData.pkgVersion);
+        const telemetryObject = ContentUtil.getTelemetryObject(content);
         this.generateInteractTelemetry(
             InteractType.OTHER,
             InteractSubtype.LOADING_SPINE,
@@ -202,13 +250,12 @@ export class TelemetryGeneratorService {
 
     generateCancelDownloadTelemetry(content: any) {
         const values = new Map();
-        const telemetryObject = new TelemetryObject(content.identifier || content.contentId, content.contentType, content.pkgVersion);
         this.generateInteractTelemetry(
             InteractType.TOUCH,
             InteractSubtype.CANCEL_CLICKED,
             Environment.HOME,
             PageId.DOWNLOAD_SPINE,
-            telemetryObject,
+            ContentUtil.getTelemetryObject(content),
             values);
     }
 
@@ -216,13 +263,12 @@ export class TelemetryGeneratorService {
         const values = new Map();
         values['downloadingIdentifers'] = downloadingIdentifier;
         values['childrenCount'] = childrenCount;
-        const telemetryObject = new TelemetryObject(content.identifier || content.contentId, content.contentType, content.pkgVersion);
         this.generateInteractTelemetry(
             InteractType.TOUCH,
             InteractSubtype.DOWNLOAD_ALL_CLICKED,
             Environment.HOME,
             pageId,
-            telemetryObject,
+            ContentUtil.getTelemetryObject(content),
             values,
             rollup, corelationList);
     }
@@ -311,13 +357,12 @@ export class TelemetryGeneratorService {
             const kbsofar = (content.size / 100) * Number(downloadProgress);
             values['downloadedSoFar'] = this.transform(kbsofar);
         }
-        const telemetryObject = new TelemetryObject(content.identifier || content.contentId, content.contentType, content.pkgVersion);
         this.generateInteractTelemetry(
             InteractType.TOUCH,
             InteractSubtype.CANCEL_CLICKED,
             Environment.HOME,
             PageId.CONTENT_DETAIL,
-            telemetryObject,
+            ContentUtil.getTelemetryObject(content),
             values);
     }
 
@@ -349,7 +394,7 @@ export class TelemetryGeneratorService {
         return mimeType === MimeType.COLLECTION;
     }
 
-    generateUtmInfoTelemetry(values: Map, pageId, cData: CorrelationData[], object?: TelemetryObject) {
+    generateUtmInfoTelemetry(values: Map, pageId, object?: TelemetryObject, corRelationData?) {
         this.generateInteractTelemetry(
             InteractType.OTHER,
             InteractSubtype.UTM_INFO,
@@ -358,7 +403,7 @@ export class TelemetryGeneratorService {
             object,
             values,
             undefined,
-            cData);
+            corRelationData);
     }
 
     /* Fast loading telemetry generator */
@@ -386,6 +431,31 @@ export class TelemetryGeneratorService {
             undefined,
             corRelationList,
             ID.NOTIFICATION_CLICKED
+        );
+    }
+
+
+    /* New Telemetry */
+    generateBackClickedNewTelemetry(isDeviceBack, env, pageId) {
+        this.generateInteractTelemetry(
+            InteractType.SELECT_BACK,
+            isDeviceBack ? InteractSubtype.DEVICE : InteractSubtype.UI,
+            env,
+            pageId
+        );
+    }
+
+    generatePageLoadedTelemetry(pageId, env, objId?, objType?, objversion?, rollup?, correlationList?) {
+        this.generateImpressionTelemetry(
+            ImpressionType.PAGE_LOADED,
+            pageId === PageId.LOCATION ? ImpressionSubtype.AUTO : '',
+            pageId,
+            env,
+            objId,
+            objType,
+            objversion,
+            rollup,
+            correlationList
         );
     }
 }

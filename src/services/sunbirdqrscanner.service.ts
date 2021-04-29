@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
-import { Subscription, Observable, Observer } from 'rxjs';
-import { Profile, ProfileType, TelemetryObject } from 'sunbird-sdk';
+import { Profile, ProfileType, TelemetryObject, CorrelationData } from 'sunbird-sdk';
 import {
   Environment,
   ImpressionSubtype,
@@ -9,7 +8,8 @@ import {
   InteractSubtype,
   InteractType,
   Mode,
-  PageId
+  PageId,
+  CorReleationDataType
 } from './telemetry-constants';
 import { ContainerService } from '@app/services/container.services';
 import { AndroidPermissionsService } from '@app/services/android-permissions/android-permissions.service';
@@ -21,10 +21,7 @@ import { Platform, ToastController, PopoverController } from '@ionic/angular';
 import { AppVersion } from '@ionic-native/app-version/ngx';
 import { initTabs, GUEST_TEACHER_TABS, GUEST_STUDENT_TABS } from '@app/app/module.service';
 import { NavigationExtras, Router } from '@angular/router';
-import { SbPopoverComponent } from '@app/app/components/popups/sb-popover/sb-popover.component';
-import { QRScannerAlert, QRAlertCallBack } from '@app/app/qrscanner-alert/qrscanner-alert.page';
-import { RouterLinks } from '@app/app/app.constant';
-import { mergeMap, take } from 'rxjs/operators';
+import { take } from 'rxjs/operators';
 
 declare const cordova;
 @Injectable()
@@ -55,7 +52,6 @@ export class SunbirdQRScanner {
     private commonUtilService: CommonUtilService,
     private appVersion: AppVersion,
     private toastController: ToastController,
-    private popCtrl: PopoverController,
     private router: Router
   ) {
     const that = this;
@@ -91,14 +87,13 @@ export class SunbirdQRScanner {
       const permissionStatus = await this.commonUtilService.getGivenPermissionStatus(AndroidPermission.CAMERA);
 
       if (permissionStatus.hasPermission) {
-        this.startQRScanner(screenTitle, displayText, displayTextColor, buttonText, showButton, source);
-        resolve('success');
+        resolve(this.startQRScanner(screenTitle, displayText, displayTextColor, buttonText, showButton, source));
       } else if (permissionStatus.isPermissionAlwaysDenied) {
         await this.commonUtilService.showSettingsPageToast('CAMERA_PERMISSION_DESCRIPTION', this.appName, PageId.QRCodeScanner, false);
       } else {
         this.showPopover(source).then((result) => {
           if (result) {
-              resolve('success');
+              resolve(result);
           } else {
            resolve(undefined);
           }
@@ -107,7 +102,7 @@ export class SunbirdQRScanner {
     });
   }
 
-  async showPopover(pageId: string): Promise<string | undefined> {
+  private async showPopover(pageId: string): Promise<string | undefined> {
     return new Promise<string | undefined>(async (resolve, reject) => {
       const confirm = await this.commonUtilService.buildPermissionPopover(
         async (whichBtnClicked: string) => {
@@ -126,6 +121,7 @@ export class SunbirdQRScanner {
                 pageId === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME,
                 PageId.PERMISSION_POPUP);
             this.appGlobalService.setIsPermissionAsked(PermissionAskedEnum.isCameraAsked, true);
+            this.appGlobalService.isNativePopupVisible = true;
             this.permission.requestPermissions([AndroidPermission.CAMERA]).subscribe((status: AndroidPermissionsStatus) => {
               if (status && status.hasPermission) {
                   this.telemetryGeneratorService.generateInteractTelemetry(
@@ -134,8 +130,14 @@ export class SunbirdQRScanner {
                       pageId === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME,
                       PageId.APP_PERMISSION_POPUP
                   );
-                  this.startScanner(this.source, this.showButton);
-                  resolve('success');
+                  this.startScanner(this.source, this.showButton).then((result) => {
+                    if (result) {
+                      resolve(result);
+                    } else {
+                      resolve(undefined);
+                    }
+                    this.appGlobalService.isNativePopupVisible = false;
+                  });
               } else {
                   this.telemetryGeneratorService.generateInteractTelemetry(
                       InteractType.TOUCH,
@@ -145,8 +147,8 @@ export class SunbirdQRScanner {
                   );
                   this.commonUtilService.showSettingsPageToast
                 ('CAMERA_PERMISSION_DESCRIPTION', this.appName, PageId.QRCodeScanner, this.appGlobalService.isOnBoardingCompleted);
+                  this.appGlobalService.setNativePopupVisible(false, 1000);
               }
-              resolve(undefined);
             }, (e) => { reject(e); });
           }
         }, this.appName, this.commonUtilService.translateMessage('CAMERA'), 'CAMERA_PERMISSION_DESCRIPTION', PageId.QRCodeScanner,
@@ -168,7 +170,7 @@ export class SunbirdQRScanner {
     }, 100);
   }
 
-getProfileSettingConfig() {
+private getProfileSettingConfig() {
     this.profile = this.appGlobalService.getCurrentUser();
     if (this.commonUtilService.isAccessibleForNonStudentRole(this.profile.profileType)) {
       initTabs(this.container, GUEST_TEACHER_TABS);
@@ -208,9 +210,14 @@ getProfileSettingConfig() {
             if (scannedData === 'cancel' ||
               scannedData === 'cancel_hw_back' ||
               scannedData === 'cancel_nav_back') {
-              this.telemetryGeneratorService.generateBackClickedTelemetry(PageId.QRCodeScanner,
+              this.telemetryGeneratorService.generateBackClickedTelemetry(PageId.SCAN,
                 source === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME,
                 scannedData === 'cancel_nav_back');
+              this.telemetryGeneratorService.generateBackClickedNewTelemetry(
+                scannedData === 'cancel_hw_back',
+                this.appGlobalService.isOnBoardingCompleted ? Environment.HOME : Environment.ONBOARDING,
+                PageId.SCAN
+               );
               this.telemetryGeneratorService.generateInteractTelemetry(
                 InteractType.OTHER,
                 InteractSubtype.QRCodeScanCancelled,
@@ -218,6 +225,18 @@ getProfileSettingConfig() {
                 PageId.QRCodeScanner);
               this.generateEndEvent(source, '');
             } else if (dialCode) {
+              const corRelationList: Array<CorrelationData> = [];
+              corRelationList.push({id: dialCode, type: CorReleationDataType.QR});
+              this.telemetryGeneratorService.generateInteractTelemetry(
+                InteractType.QR_CAPTURED,
+                '',
+                source === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME,
+                PageId.SCAN,
+                undefined,
+                undefined,
+                undefined,
+                corRelationList);
+              this.generateImpressionTelemetry(source, dialCode);
               this.qrScannerResultHandler.handleDialCode(source, scannedData, dialCode);
             } else if (this.qrScannerResultHandler.isContentId(scannedData)) {
               this.qrScannerResultHandler.handleContentId(source, scannedData);
@@ -225,7 +244,7 @@ getProfileSettingConfig() {
               this.qrScannerResultHandler.handleCertsQR(source, scannedData);
             } else {
               this.qrScannerResultHandler.handleInvalidQRCode(source, scannedData);
-              this.showInvalidCodeAlert();
+              this.showInvalidCodeAlert(scannedData);
             }
             this.stopScanner();
           }
@@ -237,22 +256,37 @@ getProfileSettingConfig() {
     });
   }
 
-generateImpressionTelemetry(source) {
-    this.telemetryGeneratorService.generateImpressionTelemetry(
-      ImpressionType.VIEW,
-      ImpressionSubtype.QRCodeScanInitiate,
-      source,
-      source === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME);
+private generateImpressionTelemetry(source, dialCode?) {
+    if (dialCode) {
+     const corRelationList: Array<CorrelationData> = [];
+     corRelationList.push({id: dialCode, type: CorReleationDataType.QR});
+     this.telemetryGeneratorService.generateImpressionTelemetry(
+      ImpressionType.QR_REQUEST, '',
+      PageId.SCAN,
+      source ? Environment.ONBOARDING : Environment.HOME, '', '', '',
+      undefined,
+      corRelationList);
+     } else {
+      this.telemetryGeneratorService.generatePageLoadedTelemetry(
+        PageId.SCAN,
+        source === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME
+     );
+      this.telemetryGeneratorService.generateImpressionTelemetry(
+        ImpressionType.VIEW,
+        ImpressionSubtype.QRCodeScanInitiate,
+        source,
+        source === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME);
+     }
   }
 
-generateStartEvent(pageId: string) {
+private generateStartEvent(pageId: string) {
     const telemetryObject = new TelemetryObject('', 'qr', undefined);
     this.telemetryGeneratorService.generateStartTelemetry(
       PageId.QRCodeScanner,
       telemetryObject);
   }
 
-generateEndEvent(pageId: string, qrData: string) {
+private generateEndEvent(pageId: string, qrData: string) {
     if (pageId) {
       const telemetryObject: TelemetryObject = new TelemetryObject(qrData, 'qr', undefined);
 
@@ -266,7 +300,7 @@ generateEndEvent(pageId: string, qrData: string) {
     }
   }
 
-  async showInvalidCodeAlert() {
+  private async showInvalidCodeAlert(scannedData) {
     this.telemetryGeneratorService.generateInteractTelemetry(
       InteractType.OTHER,
       InteractSubtype.QR_CODE_INVALID,
@@ -274,49 +308,25 @@ generateEndEvent(pageId: string, qrData: string) {
       this.source
     );
     if (this.source !== 'permission') {
-      this.commonUtilService.afterOnBoardQRErrorAlert('INVALID_QR', 'UNKNOWN_QR');
+      const corRelationList: CorrelationData[] = [{
+        id: PageId.SCAN,
+        type: CorReleationDataType.CHILD_UI
+      }];
+      this.telemetryGeneratorService.generateImpressionTelemetry(
+          InteractSubtype.QR_CODE_INVALID, '',
+          this.source === PageId.ONBOARDING_PROFILE_PREFERENCES ? PageId.SCAN_OR_MANUAL : this.source,
+          this.source === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          corRelationList
+      );
+      this.commonUtilService.afterOnBoardQRErrorAlert('INVALID_QR', 'UNKNOWN_QR', this.source, scannedData);
       return;
     }
-    let popUp;
-    const self = this;
-    const callback: QRAlertCallBack = {
-      tryAgain() {
-        popUp.dismiss().then(() => {
-          this.pauseSubscription.unsubscribe();
-        });
-        self.startScanner(self.source, self.showButton);
-      },
-      cancel() {
-        popUp.dismiss().then(() => {
-          this.pauseSubscription.unsubscribe();
-        });
-
-        if (self.showButton) {
-          if (this.appGlobalService.DISPLAY_ONBOARDING_CATEGORY_PAGE) {
-            const navigationExtras: NavigationExtras = { state: { stopScanner: true } };
-            self.router.navigate([`/${RouterLinks.PROFILE_SETTINGS}`], navigationExtras);
-          } else {
-            this.getProfileSettingConfig();
-          }
-        }
-      }
-    };
-
-    popUp = await this.popCtrl.create({
-      component: QRScannerAlert,
-      componentProps: {
-        callback,
-        invalidContent: true,
-        messageKey: 'UNKNOWN_QR',
-        tryAgainKey: 'TRY_DIFF_QR'
-      },
-      cssClass: 'qr-alert-invalid'
-    });
-
-    await popUp.present();
   }
 }
-
 export interface QRResultCallback {
   dialcode(scanResult: string, code: string);
 

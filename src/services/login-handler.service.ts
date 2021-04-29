@@ -18,7 +18,7 @@ import {
 } from 'sunbird-sdk';
 
 import { initTabs, LOGIN_TEACHER_TABS } from '@app/app/module.service';
-import { ProfileConstants, PreferenceKey, RouterLinks, EventTopics } from '@app/app/app.constant';
+import {ProfileConstants, PreferenceKey, RouterLinks, EventTopics, IgnoreTelemetryPatters} from '@app/app/app.constant';
 import { FormAndFrameworkUtilService } from '@app/services/formandframeworkutil.service';
 import { CommonUtilService } from '@app/services/common-util.service';
 import { TelemetryGeneratorService } from '@app/services/telemetry-generator.service';
@@ -31,15 +31,10 @@ import {
 import { ContainerService } from '@app/services/container.services';
 import { Router } from '@angular/router';
 import { AppGlobalService } from './app-global-service.service';
+import {Context as SbProgressLoaderContext, SbProgressLoader} from '@app/services/sb-progress-loader.service';
 
 @Injectable()
 export class LoginHandlerService {
-
-//   appName = '';
-//   @Input() source = '';
-//   @Input() title = 'OVERLAY_LABEL_COMMON';
-//   @Input() description = 'OVERLAY_INFO_TEXT_COMMON';
-//   @Output() valueChange = new EventEmitter();
 
   constructor(
     @Inject('PROFILE_SERVICE') private profileService: ProfileService,
@@ -56,7 +51,8 @@ export class LoginHandlerService {
     private telemetryGeneratorService: TelemetryGeneratorService,
     private router: Router,
     private events: Events,
-    private appGlobalService: AppGlobalService
+    private appGlobalService: AppGlobalService,
+    private sbProgressLoader: SbProgressLoader
   ) {
 
     this.appVersion.getAppName()
@@ -65,22 +61,13 @@ export class LoginHandlerService {
       });
   }
 
-  async signIn() {
+  async signIn(skipNavigation?) {
 
     if (!this.commonUtilService.networkInfo.isNetworkAvailable) {
-    //   this.valueChange.emit(true);
     } else {
-    //   this.telemetryGeneratorService.generateInteractTelemetry(
-    //     InteractType.TOUCH,
-    //     InteractSubtype.SIGNIN_OVERLAY_CLICKED,
-    //     Environment.HOME,
-    //     this.source, null
-    //   );
-
       this.generateLoginInteractTelemetry(InteractType.TOUCH, InteractSubtype.LOGIN_INITIATE, '');
 
       const that = this;
-      const loader = await this.commonUtilService.getLoader();
       const webviewSessionProviderConfigloader = await this.commonUtilService.getLoader();
 
       let webviewLoginSessionProviderConfig: WebviewSessionProviderConfig;
@@ -92,6 +79,7 @@ export class LoginHandlerService {
         webviewMigrateSessionProviderConfig = await this.formAndFrameworkUtilService.getWebviewSessionProviderConfig('migrate');
         await webviewSessionProviderConfigloader.dismiss();
       } catch (e) {
+        this.sbProgressLoader.hide({id: 'login'});
         await webviewSessionProviderConfigloader.dismiss();
         this.commonUtilService.showToast('ERROR_WHILE_LOGIN');
         return;
@@ -105,10 +93,10 @@ export class LoginHandlerService {
       )
         .toPromise()
         .then(async () => {
-          await loader.present();
+          await this.sbProgressLoader.show(this.generateIgnoreTelemetryContext());
+          const selectedUserType = await this.preferences.getString(PreferenceKey.SELECTED_USER_TYPE).toPromise();
           // set default guest user for Quiz deeplink
-          const isOnboardingCompleted = (await this.preferences.getString(PreferenceKey.IS_ONBOARDING_COMPLETED).toPromise() === 'true')
-            ? true : false;
+          const isOnboardingCompleted = (await this.preferences.getString(PreferenceKey.IS_ONBOARDING_COMPLETED).toPromise() === 'true');
           if (!isOnboardingCompleted) {
             await this.setDefaultProfileDetails();
 
@@ -117,7 +105,10 @@ export class LoginHandlerService {
               this.appGlobalService.skipCoachScreenForDeeplink = true;
             }
           }
-
+          if (skipNavigation && skipNavigation.redirectUrlAfterLogin) {
+            this.appGlobalService.redirectUrlAfterLogin = skipNavigation.redirectUrlAfterLogin;
+          }
+          this.appGlobalService.preSignInData = (skipNavigation && skipNavigation.componentData) || null;
           initTabs(that.container, LOGIN_TEACHER_TABS);
           return that.refreshProfileData();
         })
@@ -125,33 +116,23 @@ export class LoginHandlerService {
           return that.refreshTenantData(value.slug, value.title);
         })
         .then(async () => {
-          await loader.dismiss();
-          if (!this.appGlobalService.signinOnboardingLoader) {
-            this.appGlobalService.signinOnboardingLoader = await this.commonUtilService.getLoader();
-            await this.appGlobalService.signinOnboardingLoader.present();
-          }
           that.ngZone.run(() => {
             that.preferences.putString('SHOW_WELCOME_TOAST', 'true').toPromise().then();
-            // this.events.publish('UPDATE_TABS');
-            // this.router.navigate([RouterLinks.TABS]);
-            // window.location.reload();
-            this.events.publish(EventTopics.SIGN_IN_RELOAD);
+            this.events.publish(EventTopics.SIGN_IN_RELOAD, skipNavigation);
           });
         })
         .catch(async (err) => {
-          console.error(err);
-
+          this.sbProgressLoader.hide({id: 'login'});
           if (err instanceof SignInError) {
             this.commonUtilService.showToast(err.message);
           } else {
             this.commonUtilService.showToast('ERROR_WHILE_LOGIN');
           }
-          return await loader.dismiss();
         });
     }
   }
 
-  refreshProfileData() {
+  private refreshProfileData() {
     const that = this;
 
     return new Promise<any>((resolve, reject) => {
@@ -163,18 +144,32 @@ export class LoginHandlerService {
               requiredFields: ProfileConstants.REQUIRED_FIELDS
             };
             that.profileService.getServerProfilesDetails(req).toPromise()
-              .then((success) => {
+              .then(async (success: any) => {
+                const selectedUserType = await this.preferences.getString(PreferenceKey.SELECTED_USER_TYPE).toPromise();
+                const currentProfileType = (() => {
+                  if (selectedUserType === ProfileType.ADMIN) {
+                    return selectedUserType;
+                  } else if (
+                    (success.userType === ProfileType.OTHER.toUpperCase()) ||
+                    (!success.userType)
+                  ) {
+                    return ProfileType.NONE;
+                  }
+
+                  return success.userType.toLowerCase();
+                })();
                 that.generateLoginInteractTelemetry(InteractType.OTHER, InteractSubtype.LOGIN_SUCCESS, success.id);
                 const profile: Profile = {
                   uid: success.id,
                   handle: success.id,
-                  profileType: ProfileType.TEACHER,
+                  profileType: currentProfileType,
                   source: ProfileSource.SERVER,
                   serverProfile: success
                 };
                 this.profileService.createProfile(profile, ProfileSource.SERVER)
                   .toPromise()
-                  .then(() => {
+                  .then(async () => {
+                    await this.preferences.putString(PreferenceKey.SELECTED_USER_TYPE, currentProfileType).toPromise();
                     that.profileService.setActiveSessionForProfile(profile.uid).toPromise()
                       .then(() => {
                         that.formAndFrameworkUtilService.updateLoggedInUser(success, profile)
@@ -201,7 +196,7 @@ export class LoginHandlerService {
     });
   }
 
-  refreshTenantData(slug: string, title: string) {
+  private refreshTenantData(slug: string, title: string) {
     return new Promise((resolve, reject) => {
       this.profileService.getTenantInfo({ slug: '' }).toPromise()
         .then(async (res) => {
@@ -219,7 +214,7 @@ export class LoginHandlerService {
     });
   }
 
-  generateLoginInteractTelemetry(interactType, interactSubtype, uid) {
+  private generateLoginInteractTelemetry(interactType, interactSubtype, uid) {
     const valuesMap = new Map();
     valuesMap['UID'] = uid;
     this.telemetryGeneratorService.generateInteractTelemetry(
@@ -249,7 +244,7 @@ export class LoginHandlerService {
     });
   }
 
-  getDefaultProfileRequest() {
+  private getDefaultProfileRequest() {
     const profile = this.appGlobalService.getCurrentUser();
     const profileRequest: Profile = {
       uid: profile.uid,
@@ -263,5 +258,17 @@ export class LoginHandlerService {
       source: profile.source || ProfileSource.LOCAL
     };
     return profileRequest;
+  }
+
+  private generateIgnoreTelemetryContext(): SbProgressLoaderContext {
+    return {
+      id: 'login',
+      ignoreTelemetry: {
+        when: {
+          interact: IgnoreTelemetryPatters.IGNORE_SIGN_IN_PAGE_ID_EVENTS,
+          impression: IgnoreTelemetryPatters.IGNORE_CHANNEL_IMPRESSION_EVENTS
+        }
+      }
+    };
   }
 }

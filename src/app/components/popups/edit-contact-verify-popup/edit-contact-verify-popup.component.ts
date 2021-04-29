@@ -72,7 +72,8 @@ export class EditContactVerifyPopupComponent implements OnInit {
           this.popOverCtrl.dismiss({ OTPSuccess: true, value: this.key });
         })
         .catch(error => {
-          if (error instanceof HttpClientError && error.response.responseCode === 400) {
+          if (HttpClientError.isInstance(error)
+           && error.response.responseCode === 400) {
             if (typeof error.response.body  === 'object') {
               if (error.response.body.params.err === 'OTP_VERIFICATION_FAILED' &&
               error.response.body.result.remainingAttempt > 0) {
@@ -97,13 +98,11 @@ export class EditContactVerifyPopupComponent implements OnInit {
       let req: GenerateOtpRequest;
       if (this.type === ProfileConstants.CONTACT_TYPE_PHONE) {
         req = {
-          userId: this.userId,
           key: this.key,
           type: ProfileConstants.CONTACT_TYPE_PHONE
         };
       } else {
         req = {
-          userId: this.userId,
           key: this.key,
           type: ProfileConstants.CONTACT_TYPE_EMAIL
         };
@@ -116,8 +115,9 @@ export class EditContactVerifyPopupComponent implements OnInit {
           await loader.dismiss();
           loader = undefined;
         })
-        .catch(async () => {
+        .catch(async (e) => {
           if (loader) {
+            this.commonUtilService.showToast('SOMETHING_WENT_WRONG');
             await loader.dismiss();
             loader = undefined;
           }

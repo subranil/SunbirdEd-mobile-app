@@ -2,10 +2,15 @@ import { Component, NgZone, OnInit, Inject, ViewChild } from '@angular/core';
 import {
   Events,
   PopoverController,
+  ToastController,
   IonRefresher,
 } from '@ionic/angular';
-import { generateInteractTelemetry } from '@app/app/telemetryutil';
-import { ContentCard, ContentType, MimeType, ProfileConstants, RouterLinks, ContentFilterConfig } from '@app/app/app.constant';
+import {
+  ContentCard,
+  ProfileConstants,
+  RouterLinks,
+  ContentFilterConfig,
+} from '@app/app/app.constant';
 import { FormAndFrameworkUtilService } from '@app/services/formandframeworkutil.service';
 import { AppGlobalService } from '@app/services/app-global-service.service';
 import { CommonUtilService } from '@app/services/common-util.service';
@@ -27,23 +32,46 @@ import {
   TelemetryObject,
   UpdateServerProfileInfoRequest,
   CachedItemRequestSourceFrom,
-  CourseCertificate
+  CourseCertificate,
+  CertificateAlreadyDownloaded,
+  NetworkError,
+  FormRequest,
+  FormService,
+  FrameworkService,
+  ProfileType
 } from 'sunbird-sdk';
-import { Environment, InteractSubtype, InteractType, PageId } from '@app/services/telemetry-constants';
-import { ActivatedRoute, Router, NavigationExtras } from '@angular/router';
+import { Environment, InteractSubtype, InteractType, PageId, ID } from '@app/services/telemetry-constants';
+import { Router, NavigationExtras } from '@angular/router';
 import { EditContactVerifyPopupComponent } from '@app/app/components/popups/edit-contact-verify-popup/edit-contact-verify-popup.component';
 import {
   EditContactDetailsPopupComponent
 } from '@app/app/components/popups/edit-contact-details-popup/edit-contact-details-popup.component';
-import { AccountRecoveryInfoComponent } from '../components/popups/account-recovery-id/account-recovery-id-popup.component';
+import {
+  AccountRecoveryInfoComponent
+} from '../components/popups/account-recovery-id/account-recovery-id-popup.component';
 import { SocialSharing } from '@ionic-native/social-sharing/ngx';
-import { TeacherIdVerificationComponent } from '../components/popups/teacher-id-verification-popup/teacher-id-verification-popup.component';
-import { Observable } from 'rxjs';
+import { AndroidPermissionsService } from '@app/services';
+import {
+  AndroidPermissionsStatus,
+  AndroidPermission
+} from '@app/services/android-permissions/android-permission';
+import { AppVersion } from '@ionic-native/app-version/ngx';
+import { SbProgressLoader } from '@app/services/sb-progress-loader.service';
+import { FileOpener } from '@ionic-native/file-opener/ngx';
+import { TranslateService } from '@ngx-translate/core';
+import { FieldConfig } from 'common-form-elements';
+import { CertificateDownloadAsPdfService } from 'sb-svg2pdf';
+import { NavigationService } from '@app/services/navigation-handler.service';
+import { ContentUtil } from '@app/util/content-util';
+import { CsPrimaryCategory } from '@project-sunbird/client-services/services/content';
+import { FormConstants } from '../form.constants';
+import { ProfileHandler } from '@app/services/profile-handler';
 
 @Component({
   selector: 'app-profile',
   templateUrl: './profile.page.html',
   styleUrls: ['./profile.page.scss'],
+  providers: [CertificateDownloadAsPdfService]
 })
 export class ProfilePage implements OnInit {
 
@@ -60,19 +88,18 @@ export class ProfilePage implements OnInit {
   refresh: boolean;
   profileName: string;
   onProfile = true;
-  trainingsCompleted = [];
   roles = [];
-  userLocation = {
-    state: {},
-    district: {}
-  };
+  userLocation = {};
+  appName = '';
 
   imageUri = 'assets/imgs/ic_profile_default.png';
 
-  readonly DEFAULT_PAGINATION_LIMIT = 2;
+  readonly DEFAULT_PAGINATION_LIMIT = 3;
+  readonly DEFAULT_ENROLLED_COURSE_LIMIT = 3;
   rolesLimit = 2;
   badgesLimit = 2;
-  trainingsLimit = 2;
+  myLearningLimit = this.DEFAULT_ENROLLED_COURSE_LIMIT;
+  learnerPassbookLimit = this.DEFAULT_ENROLLED_COURSE_LIMIT;
   startLimit = 0;
   custodianOrgId: string;
   isCustodianOrgId: boolean;
@@ -88,16 +115,28 @@ export class ProfilePage implements OnInit {
   layoutPopular = ContentCard.LAYOUT_POPULAR;
   headerObservable: any;
   timer: any;
-  mappedTrainingCertificates: CourseCertificate[] = [];
-  isDefaultChannelProfile$: Observable<boolean>;
+  mappedTrainingCertificates: {
+    courseName: string,
+    dateTime: string,
+    courseId: string,
+    certificate?: string,
+    issuedCertificate?: string,
+    status: number
+  }[] = [];
+  isDefaultChannelProfile: boolean;
+  personaTenantDeclaration: string;
+  selfDeclaredDetails: any[] = [];
+  selfDeclarationInfo: any;
+  learnerPassbook: any[] = [];
 
   constructor(
     @Inject('PROFILE_SERVICE') private profileService: ProfileService,
     @Inject('AUTH_SERVICE') private authService: AuthService,
     @Inject('CONTENT_SERVICE') private contentService: ContentService,
     @Inject('COURSE_SERVICE') private courseService: CourseService,
+    @Inject('FORM_SERVICE') private formService: FormService,
+    @Inject('FRAMEWORK_SERVICE') private frameworkService: FrameworkService,
     private zone: NgZone,
-    private route: ActivatedRoute,
     private router: Router,
     private popoverCtrl: PopoverController,
     private events: Events,
@@ -105,8 +144,17 @@ export class ProfilePage implements OnInit {
     private telemetryGeneratorService: TelemetryGeneratorService,
     private formAndFrameworkUtilService: FormAndFrameworkUtilService,
     private commonUtilService: CommonUtilService,
-    private socialShare: SocialSharing,
+    private socialSharing: SocialSharing,
     private headerService: AppHeaderService,
+    private permissionService: AndroidPermissionsService,
+    private appVersion: AppVersion,
+    private navService: NavigationService,
+    private sbProgressLoader: SbProgressLoader,
+    private fileOpener: FileOpener,
+    private toastController: ToastController,
+    private translate: TranslateService,
+    private certificateDownloadAsPdfService: CertificateDownloadAsPdfService,
+    private profileHandler: ProfileHandler
   ) {
     const extrasState = this.router.getCurrentNavigation().extras.state;
     if (extrasState) {
@@ -123,8 +171,12 @@ export class ProfilePage implements OnInit {
     });
 
     this.events.subscribe('loggedInProfile:update', (framework) => {
-      this.updateLocalProfile(framework);
-      this.refreshProfileData();
+      if (framework) {
+        this.updateLocalProfile(framework);
+        this.refreshProfileData();
+      } else {
+        this.doRefresh();
+      }
     });
 
     this.formAndFrameworkUtilService.getCustodianOrgId().then((orgId: string) => {
@@ -133,13 +185,9 @@ export class ProfilePage implements OnInit {
 
   }
 
-  ngOnInit() {
+  async ngOnInit() {
     this.doRefresh();
-    this.events.subscribe('profilePicture:update', (res) => {
-      if (res.isUploading && res.url !== '') {
-        this.imageUri = res.url;
-      }
-    });
+    this.appName = await this.appVersion.getAppName();
   }
 
   ionViewWillEnter() {
@@ -150,7 +198,6 @@ export class ProfilePage implements OnInit {
       this.handleHeaderEvents(eventName);
     });
     this.headerService.showHeaderWithHomeButton();
-    this.isDefaultChannelProfile$ = this.profileService.isDefaultChannelProfile();
   }
 
   ionViewWillLeave(): void {
@@ -162,7 +209,6 @@ export class ProfilePage implements OnInit {
   ionViewDidEnter() {
     this.refresher.disabled = false;
   }
-  
 
   async doRefresh(refresher?) {
     const loader = await this.commonUtilService.getLoader();
@@ -181,16 +227,17 @@ export class ProfilePage implements OnInit {
             this.events.publish('refresh:profile');
             this.refresh = false;
             await loader.dismiss();
+            await this.sbProgressLoader.hide({ id: 'login' });
             resolve();
           }, 500);
           // This method is used to handle trainings completed by user
-
+          this.getLearnerPassbook();
           this.getEnrolledCourses(refresher);
           this.searchContent();
+          this.getSelfDeclaredDetails();
         });
       })
       .catch(async error => {
-        console.error('Error while Fetching Data', error);
         this.refresh = false;
         await loader.dismiss();
       });
@@ -229,9 +276,17 @@ export class ProfilePage implements OnInit {
           }
           that.profileService.getServerProfilesDetails(serverProfileDetailsRequest).toPromise()
             .then((profileData) => {
-              that.zone.run(() => {
+              that.zone.run(async () => {
                 that.resetProfile();
                 that.profile = profileData;
+                that.frameworkService.setActiveChannelId(profileData.rootOrg.hashTagId).toPromise();
+                that.isDefaultChannelProfile = await that.profileService.isDefaultChannelProfile().toPromise();
+                const role: string = (!that.profile.userType ||
+                  (that.profile.userType && that.profile.userType === ProfileType.OTHER.toUpperCase())) ? '' : that.profile.userType;
+                that.profile['persona'] =  await that.profileHandler.getPersonaConfig(role.toLowerCase());
+                that.userLocation = that.commonUtilService.getUserLocation(that.profile);
+                that.profile['subPersona'] = await that.profileHandler.getSubPersona(that.profile.userSubType,
+                      role.toLowerCase(), this.userLocation);
                 that.profileService.getActiveSessionProfile({ requiredFields: ProfileConstants.REQUIRED_FIELDS }).toPromise()
                   .then((activeProfile) => {
                     that.formAndFrameworkUtilService.updateLoggedInUser(profileData, activeProfile)
@@ -244,20 +299,16 @@ export class ProfilePage implements OnInit {
                           }); */
 
                           // Need to test thoroughly
-                          that.router.navigate([`/${RouterLinks.PROFILE}/${RouterLinks.CATEGORIES_EDIT}`], {
-                            state: {
-                              showOnlyMandatoryFields: true,
-                              profile: frameWorkData['activeProfileData']
-                            }
-                          });
+                          // that.router.navigate([`/${RouterLinks.PROFILE}/${RouterLinks.CATEGORIES_EDIT}`], {
+                          //   state: {
+                          //     showOnlyMandatoryFields: true,
+                          //     profile: frameWorkData['activeProfileData']
+                          //   }
+                          // });
                         }
                       });
-                    if (profileData && profileData.avatar) {
-                      that.imageUri = profileData.avatar;
-                    }
                     that.formatRoles();
                     that.getOrgDetails();
-                    that.userLocation = that.commonUtilService.getUserLocation(that.profile);
                     that.isCustodianOrgId = (that.profile.rootOrg.rootOrgId === this.custodianOrgId);
                     that.isStateValidated = that.profile.stateValidated;
                     resolve();
@@ -272,13 +323,6 @@ export class ProfilePage implements OnInit {
         }
       });
     });
-  }
-
-  /**
-   * Method to convert Array to Comma separated string
-   */
-  arrayToString(stringArray: Array<string>): string {
-    return stringArray.join(', ');
   }
 
   /**
@@ -304,7 +348,7 @@ export class ProfilePage implements OnInit {
    */
   showMoreItems(): void {
     this.rolesLimit = this.roles.length;
-    generateInteractTelemetry(
+    this.telemetryGeneratorService.generateInteractTelemetry(
       InteractType.TOUCH,
       InteractSubtype.VIEW_MORE_CLICKED,
       Environment.HOME,
@@ -323,7 +367,7 @@ export class ProfilePage implements OnInit {
 
   showMoreBadges(): void {
     this.badgesLimit = this.profile.badgeAssertions.length;
-    generateInteractTelemetry(
+    this.telemetryGeneratorService.generateInteractTelemetry(
       InteractType.TOUCH,
       InteractSubtype.VIEW_MORE_CLICKED,
       Environment.HOME,
@@ -336,9 +380,16 @@ export class ProfilePage implements OnInit {
     this.badgesLimit = this.DEFAULT_PAGINATION_LIMIT;
   }
 
-  showMoreTrainings(): void {
-    this.trainingsLimit = this.trainingsCompleted.length;
-    generateInteractTelemetry(
+  showMoreTrainings(listName): void {
+    switch (listName) {
+      case 'myLearning':
+        this.myLearningLimit = this.mappedTrainingCertificates.length;
+        break;
+      case 'learnerPassbook':
+        this.learnerPassbookLimit = this.learnerPassbook.length;
+        break;
+    }
+    this.telemetryGeneratorService.generateInteractTelemetry(
       InteractType.TOUCH,
       InteractSubtype.VIEW_MORE_CLICKED,
       Environment.HOME,
@@ -347,21 +398,16 @@ export class ProfilePage implements OnInit {
       undefined);
   }
 
-  showLessTrainings(): void {
-    this.trainingsLimit = this.DEFAULT_PAGINATION_LIMIT;
+  showLessTrainings(listName): void {
+    switch (listName) {
+      case 'myLearning':
+        this.myLearningLimit = this.DEFAULT_ENROLLED_COURSE_LIMIT;
+        break;
+      case 'learnerPassbook':
+        this.learnerPassbookLimit = this.DEFAULT_ENROLLED_COURSE_LIMIT;
+        break;
+    }
   }
-
-
-  /**
-   *  Returns the Object with given Keys only
-   * @param keys - Keys of the object which are required in new sub object
-   * @param obj - Actual object
-   */
-  getSubset(keys, obj) {
-    return keys.reduce((a, c) => ({ ...a, [c]: obj[c] }), {});
-  }
-
-
 
   /**
    * To get enrolled course(s) of logged-in user i.e, trainings in the UI.
@@ -370,7 +416,7 @@ export class ProfilePage implements OnInit {
    */
   async getEnrolledCourses(refresher?, refreshCourseList?) {
     const loader = await this.commonUtilService.getLoader();
-    if (refreshCourseList) { 
+    if (refreshCourseList) {
       loader.present();
       this.telemetryGeneratorService.generateInteractTelemetry(
         InteractType.TOUCH,
@@ -380,14 +426,15 @@ export class ProfilePage implements OnInit {
       );
     }
     const option = {
-      userId: this.profile.userId,
-      returnFreshCourses: refresher ? true : false
+      userId: this.profile.userId || this.profile.id,
+      returnFreshCourses: !!refresher
     };
-    this.trainingsCompleted = [];
+    this.mappedTrainingCertificates = [];
     this.courseService.getEnrolledCourses(option).toPromise()
       .then((res: Course[]) => {
-        this.trainingsCompleted = res.filter((course) => course.status === 2);
-        this.mappedTrainingCertificates = this.mapTrainingsToCertificates(this.trainingsCompleted);
+        if (res.length) {
+          this.mappedTrainingCertificates = this.mapTrainingsToCertificates(res);
+        }
         refreshCourseList ? loader.dismiss() : false;
       })
       .catch((error: any) => {
@@ -395,7 +442,7 @@ export class ProfilePage implements OnInit {
       });
   }
 
-  mapTrainingsToCertificates(trainings: Course[]): CourseCertificate[] {
+  mapTrainingsToCertificates(trainings: Course[]) {
     /**
      * If certificate is there loop through certificates and add certificates in accumulator
      * with Course_Name and Date
@@ -406,60 +453,152 @@ export class ProfilePage implements OnInit {
         courseName: course.courseName,
         dateTime: course.dateTime,
         courseId: course.courseId,
-        certificate: undefined
+        certificate: undefined,
+        issuedCertificate: undefined,
+        status: course.status
       };
       if (course.certificates && course.certificates.length) {
         oneCert.certificate = course.certificates[0];
-        accumulator = accumulator.concat(oneCert);
-      } else {
-        accumulator = accumulator.concat(oneCert);
       }
+      if (course.issuedCertificates && course.issuedCertificates.length) {
+        oneCert.issuedCertificate = course.issuedCertificates[0];
+      }
+      accumulator = accumulator.concat(oneCert);
       return accumulator;
     }, []);
   }
 
-  // getCertificateCourse(certificate: CourseCertificate): Course {
-  //   return this.trainingsCompleted.find((course: Course) => {
-  //     return course.certificates ? course.certificates.indexOf(certificate) > -1 : undefined;
-  //   });
-  // }
-
-  downloadTrainingCertificate(course: Course, certificate: CourseCertificate) {
-    const telemetryObject: TelemetryObject = new TelemetryObject(certificate.id, ContentType.CERTIFICATE, undefined);
-
-    const values = new Map();
-    values['courseId'] = course.courseId;
-
-    this.telemetryGeneratorService.generateInteractTelemetry(InteractType.TOUCH,
-      InteractSubtype.DOWNLOAD_CERTIFICATE_CLICKED,
-      Environment.USER, // env
-      PageId.PROFILE, // page name
-      telemetryObject,
-      values);
-
-    this.courseService.downloadCurrentProfileCourseCertificate({
-      courseId: course.courseId,
-      certificateToken: certificate.token
-    })
-      .subscribe();
+  async getLearnerPassbook() {
+    try {
+      const request = { userId: this.profile.userId || this.profile.id };
+      this.learnerPassbook = (await this.courseService.getLearnerCertificates(request).toPromise())
+        .filter((learnerCertificate: any) => (learnerCertificate &&
+          learnerCertificate._source && learnerCertificate._source.data && learnerCertificate._source.data.badge))
+        .map((learnerCertificate: any) => {
+          const oneCert: any = {
+            issuingAuthority: learnerCertificate._source.data.badge.issuer.name,
+            issuedOn: learnerCertificate._source.data.issuedOn,
+            courseName: learnerCertificate._source.data.badge.name,
+            courseId: learnerCertificate._source.related.courseId || learnerCertificate._source.related.Id
+          };
+          if (learnerCertificate._source.pdfUrl) {
+            oneCert.certificate = {
+              url: learnerCertificate._source.pdfUrl || undefined,
+              id: learnerCertificate._id || undefined,
+              issuedOn: learnerCertificate._source.data.issuedOn,
+              name: learnerCertificate._source.data.badge.issuer.name
+            };
+          } else {
+            oneCert.issuedCertificate = {
+              identifier: learnerCertificate._id,
+              name: learnerCertificate._source.data.badge.issuer.name,
+              issuedOn: learnerCertificate._source.data.issuedOn
+            };
+          }
+          return oneCert;
+        });
+    } catch (error) {
+      console.log('Learner Passbook API Error', error);
+    }
   }
 
-  shareTrainingCertificate(course: Course, certificate: CourseCertificate) {
-    this.courseService.downloadCurrentProfileCourseCertificate({
+  async downloadTrainingCertificate(course: {
+    courseName: string,
+    dateTime: string,
+    courseId: string,
+    certificate?: CourseCertificate,
+    issuedCertificate?: CourseCertificate,
+    status: number
+  }) {
+    const downloadMessage = await this.translate.get('CERTIFICATE_DOWNLOAD_INFO').toPromise();
+    const toastOptions = {
+      message: downloadMessage || 'Certificate getting downloaded'
+    };
+
+    await this.checkForPermissions().then(async (result) => {
+      if (result) {
+        const telemetryObject: TelemetryObject = new TelemetryObject(course.courseId, 'Certificate', undefined);
+
+        const values = new Map();
+        values['courseId'] = course.courseId;
+
+        this.telemetryGeneratorService.generateInteractTelemetry(InteractType.TOUCH,
+          InteractSubtype.DOWNLOAD_CERTIFICATE_CLICKED,
+          Environment.USER, // env
+          PageId.PROFILE, // page name
+          telemetryObject,
+          values);
+        let toast;
+        if (this.commonUtilService.networkInfo.isNetworkAvailable) {
+          toast = await this.toastController.create(toastOptions);
+          await toast.present();
+        }
+        if (course.issuedCertificate) {
+          this.courseService.downloadCurrentProfileCourseCertificateV2(
+            { courseId: course.courseId, certificate: course.issuedCertificate },
+            (svgData, callback) => {
+              this.certificateDownloadAsPdfService.download(
+                svgData, (fileName, pdfData) => callback(pdfData as any)
+              );
+            }).toPromise()
+            .then(async (res) => {
+              if (toast) {
+                await toast.dismiss();
+              }
+              this.openpdf(res.path);
+            }).catch(async (err) => {
+              if (!(err instanceof CertificateAlreadyDownloaded) && !(NetworkError.isInstance(err))) {
+                await this.downloadLegacyCertificate(course, toast);
+              }
+              await this.handleCertificateDownloadIssue(toast, err);
+            });
+        } else {
+          await this.downloadLegacyCertificate(course, toast);
+        }
+      } else {
+        this.commonUtilService.showSettingsPageToast('FILE_MANAGER_PERMISSION_DESCRIPTION', this.appName, PageId.PROFILE, true);
+      }
+    });
+  }
+
+  private async downloadLegacyCertificate(course, toast) {
+    const downloadRequest = {
       courseId: course.courseId,
-      certificateToken: certificate.token
-    })
-      .subscribe((res) => {
-        this.socialShare.share('', '', res.path, '');
+      certificate: course.certificate
+    };
+    this.courseService.downloadCurrentProfileCourseCertificate(downloadRequest).toPromise()
+      .then(async (res) => {
+        if (toast) {
+          await toast.dismiss();
+        }
+        this.openpdf(res.path);
+      }).catch(async (err) => {
+        await this.handleCertificateDownloadIssue(toast, err);
       });
   }
 
-  isResource(contentType) {
-    return contentType === ContentType.STORY ||
-      contentType === ContentType.WORKSHEET;
+  private async handleCertificateDownloadIssue(toast: any, err: any) {
+    if (toast) {
+      await toast.dismiss();
+    }
+    if (err instanceof CertificateAlreadyDownloaded) {
+      this.openpdf(err.filePath);
+    } else if (NetworkError.isInstance(err)) {
+      this.commonUtilService.showToast('NO_INTERNET_TITLE', false, '', 3000, 'top');
+    } else {
+      this.commonUtilService.showToast(this.commonUtilService.translateMessage('SOMETHING_WENT_WRONG'));
+    }
   }
 
-
+  openpdf(path) {
+    this.fileOpener
+      .open(path, 'application/pdf')
+      .then(() => console.log('File is opened'))
+      .catch((e) => {
+        console.log('Error opening file', e);
+        this.commonUtilService.showToast('CERTIFICATE_ALREADY_DOWNLOADED');
+      });
+  }
 
   /**
    * Navigate to the course/content details page
@@ -468,13 +607,10 @@ export class ProfilePage implements OnInit {
     const identifier = content.contentId || content.identifier;
     let telemetryObject: TelemetryObject;
     if (layoutName === ContentCard.LAYOUT_INPROGRESS) {
-      telemetryObject = new TelemetryObject(identifier, ContentType.COURSE, undefined);
+      telemetryObject = new TelemetryObject(identifier, CsPrimaryCategory.COURSE, undefined);
     } else {
-      const telemetryObjectType = this.isResource(content.contentType) ? ContentType.RESOURCE : content.contentType;
-      telemetryObject = new TelemetryObject(identifier, telemetryObjectType, undefined);
-
+      telemetryObject = ContentUtil.getTelemetryObject(content);
     }
-
 
     const values = new Map();
     values['sectionName'] = 'Contributions';
@@ -486,28 +622,12 @@ export class ProfilePage implements OnInit {
       PageId.PROFILE,
       telemetryObject,
       values);
-    if (content.contentType === ContentType.COURSE) {
-      const navigationExtras: NavigationExtras = {
-        state: {
-          content
-        }
-      };
-      this.router.navigate([RouterLinks.ENROLLED_COURSE_DETAILS], navigationExtras)
-    } else if (content.mimeType === MimeType.COLLECTION) {
-      const navigationExtras: NavigationExtras = {
-        state: {
-          content
-        }
-      };
-      this.router.navigate([RouterLinks.COLLECTION_DETAIL_ETB], navigationExtras);
-    } else {
-      const navigationExtras: NavigationExtras = {
-        state: {
-          content
-        }
-      };
-      this.router.navigate([RouterLinks.CONTENT_DETAILS], navigationExtras);
-    }
+    this.navService.navigateToDetailPage(
+      content,
+      {
+        content
+      }
+    );
   }
 
   updateLocalProfile(framework) {
@@ -515,6 +635,9 @@ export class ProfilePage implements OnInit {
     this.profileService.getActiveSessionProfile({ requiredFields: ProfileConstants.REQUIRED_FIELDS })
       .toPromise()
       .then((resp: any) => {
+        if (framework.userType) {
+          resp.profileType = framework.userType;
+        }
         this.formAndFrameworkUtilService.updateLoggedInUser(this.profile, resp)
           .then((success) => {
             console.log('updateLocalProfile-- ', success);
@@ -535,28 +658,9 @@ export class ProfilePage implements OnInit {
     }
   }
 
-  navigateToEditPersonalDetails() {
-    if (this.commonUtilService.networkInfo.isNetworkAvailable) {
-      this.telemetryGeneratorService.generateInteractTelemetry(
-        InteractType.TOUCH,
-        InteractSubtype.EDIT_CLICKED,
-        Environment.HOME,
-        PageId.PROFILE, null);
-
-      const navigationExtras: NavigationExtras = {
-        state: {
-          profile: this.profile,
-          isShowBackButton: true
-        }
-      };
-
-      // this.router.navigate([`/${RouterLinks.PROFILE}/${RouterLinks.PERSONAL_DETAILS_EDIT}`], navigationExtras);
-      this.router.navigate([RouterLinks.DISTRICT_MAPPING], navigationExtras);
-    } else {
-      this.commonUtilService.showToast('NEED_INTERNET_TO_CHANGE');
-    }
+  onEditProfileClicked() {
+    this.navService.navigateToEditPersonalDetails(this.profile, PageId.PROFILE);
   }
-
 
   /**
    * Searches contents created by the user
@@ -586,9 +690,7 @@ export class ProfilePage implements OnInit {
       });
   }
 
-
-
-  async editMobileNumber(event) {
+  async editMobileNumber() {
     const componentProps = {
       phone: this.profile.phone,
       title: this.profile.phone ?
@@ -602,7 +704,7 @@ export class ProfilePage implements OnInit {
     await this.showEditContactPopup(componentProps);
   }
 
-  async editEmail(event) {
+  async editEmail() {
     const componentProps = {
       email: this.profile.email,
       title: this.profile.email ?
@@ -616,7 +718,7 @@ export class ProfilePage implements OnInit {
     await this.showEditContactPopup(componentProps);
   }
 
-  async showEditContactPopup(componentProps) {
+  private async showEditContactPopup(componentProps) {
     const popover = await this.popoverCtrl.create({
       component: EditContactDetailsPopupComponent,
       componentProps,
@@ -626,11 +728,11 @@ export class ProfilePage implements OnInit {
     const { data } = await popover.onDidDismiss();
 
     if (data && data.isEdited) {
-      this.callOTPPopover(componentProps.type, data.value);
+      await this.callOTPPopover(componentProps.type, data.value);
     }
   }
 
-  async callOTPPopover(type: string, key?: any) {
+  private async callOTPPopover(type: string, key?: any) {
     if (type === ProfileConstants.CONTACT_TYPE_PHONE) {
       const componentProps = {
         key,
@@ -662,7 +764,7 @@ export class ProfilePage implements OnInit {
     }
   }
 
-  async openContactVerifyPopup(component, componentProps, cssClass) {
+  private async openContactVerifyPopup(component, componentProps, cssClass) {
     const popover = await this.popoverCtrl.create({ component, componentProps, cssClass });
     await popover.present();
     const { data } = await popover.onDidDismiss();
@@ -670,7 +772,7 @@ export class ProfilePage implements OnInit {
     return data;
   }
 
-  async updatePhoneInfo(phone) {
+  private async updatePhoneInfo(phone) {
     const req: UpdateServerProfileInfoRequest = {
       userId: this.profile.userId,
       phone,
@@ -679,7 +781,7 @@ export class ProfilePage implements OnInit {
     await this.updateProfile(req, 'PHONE_UPDATE_SUCCESS');
   }
 
-  async updateEmailInfo(email) {
+  private async updateEmailInfo(email) {
     const req: UpdateServerProfileInfoRequest = {
       userId: this.profile.userId,
       email,
@@ -688,14 +790,14 @@ export class ProfilePage implements OnInit {
     await this.updateProfile(req, 'EMAIL_UPDATE_SUCCESS');
   }
 
-  async updateProfile(request: UpdateServerProfileInfoRequest, successMessage: string) {
+  private async updateProfile(request: UpdateServerProfileInfoRequest, successMessage: string) {
     const loader = await this.commonUtilService.getLoader();
     this.profileService.updateServerProfile(request).toPromise()
       .then(async () => {
         await loader.dismiss();
         this.doRefresh();
         this.commonUtilService.showToast(this.commonUtilService.translateMessage(successMessage));
-      }).catch(async (e) => {
+      }).catch(async () => {
         await loader.dismiss();
         this.commonUtilService.showToast(this.commonUtilService.translateMessage('SOMETHING_WENT_WRONG'));
       });
@@ -739,7 +841,7 @@ export class ProfilePage implements OnInit {
   }
 
 
-  dismissMessage() {
+  private dismissMessage() {
     this.timer = setTimeout(() => {
       this.informationProfileName = false;
       this.informationOrgName = false;
@@ -796,14 +898,165 @@ export class ProfilePage implements OnInit {
     }
   }
 
-  async showTeacherIdVerificationPopup() {
-    const popover = await this.popoverCtrl.create({
-      component: TeacherIdVerificationComponent,
-      backdropDismiss: false,
-      cssClass: 'popover-alert'
-    });
+  async openEnrolledCourse(coursecertificate) {
+    try {
+      const content = await this.contentService.getContentDetails({ contentId: coursecertificate.courseId }).toPromise();
+      const courseParams: NavigationExtras = {
+        state: {
+          content,
+          resumeCourseFlag: (coursecertificate.status === 1 || coursecertificate.status === 0)
+        }
+      };
+      console.log('Content Data', content);
+      this.navService.navigateToTrackableCollection(
+        {
+          content,
+          resumeCourseFlag: (coursecertificate.status === 1 || coursecertificate.status === 0)
+        }
+      );
+      // this.router.navigate([RouterLinks.ENROLLED_COURSE_DETAILS], courseParams);
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
-    await popover.present();
+  private async checkForPermissions(): Promise<boolean | undefined> {
+    return new Promise<boolean | undefined>(async (resolve) => {
+      const permissionStatus = await this.commonUtilService.getGivenPermissionStatus(AndroidPermission.WRITE_EXTERNAL_STORAGE);
+      if (permissionStatus.hasPermission) {
+        resolve(true);
+      } else if (permissionStatus.isPermissionAlwaysDenied) {
+        await this.commonUtilService.showSettingsPageToast('FILE_MANAGER_PERMISSION_DESCRIPTION', this.appName, PageId.PROFILE, true);
+        resolve(false);
+      } else {
+        this.showStoragePermissionPopup().then((result) => {
+          if (result) {
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        });
+      }
+    });
+  }
+
+  private async showStoragePermissionPopup(): Promise<boolean | undefined> {
+    // await this.popoverCtrl.dismiss();
+    return new Promise<boolean | undefined>(async (resolve) => {
+      const confirm = await this.commonUtilService.buildPermissionPopover(
+        async (selectedButton: string) => {
+          if (selectedButton === this.commonUtilService.translateMessage('NOT_NOW')) {
+            this.telemetryGeneratorService.generateInteractTelemetry(
+              InteractType.TOUCH,
+              InteractSubtype.NOT_NOW_CLICKED,
+              Environment.SETTINGS,
+              PageId.PERMISSION_POPUP);
+            await this.commonUtilService.showSettingsPageToast('FILE_MANAGER_PERMISSION_DESCRIPTION', this.appName, PageId.PROFILE, true);
+          } else if (selectedButton === this.commonUtilService.translateMessage('ALLOW')) {
+            this.telemetryGeneratorService.generateInteractTelemetry(
+              InteractType.TOUCH,
+              InteractSubtype.ALLOW_CLICKED,
+              Environment.SETTINGS,
+              PageId.PERMISSION_POPUP);
+            this.appGlobalService.isNativePopupVisible = true;
+            this.permissionService.requestPermission(AndroidPermission.WRITE_EXTERNAL_STORAGE)
+              .subscribe(async (status: AndroidPermissionsStatus) => {
+                if (status.hasPermission) {
+                  this.telemetryGeneratorService.generateInteractTelemetry(
+                    InteractType.TOUCH,
+                    InteractSubtype.ALLOW_CLICKED,
+                    Environment.SETTINGS,
+                    PageId.APP_PERMISSION_POPUP
+                  );
+                  resolve(true);
+                } else if (status.isPermissionAlwaysDenied) {
+                  await this.commonUtilService.showSettingsPageToast
+                    ('FILE_MANAGER_PERMISSION_DESCRIPTION', this.appName, PageId.PROFILE, true);
+                  resolve(false);
+                } else {
+                  this.telemetryGeneratorService.generateInteractTelemetry(
+                    InteractType.TOUCH,
+                    InteractSubtype.DENY_CLICKED,
+                    Environment.SETTINGS,
+                    PageId.APP_PERMISSION_POPUP
+                  );
+                  await this.commonUtilService.showSettingsPageToast
+                    ('FILE_MANAGER_PERMISSION_DESCRIPTION', this.appName, PageId.PROFILE, true);
+                }
+                this.appGlobalService.setNativePopupVisible(false);
+                resolve(undefined);
+              });
+          }
+        }, this.appName, this.commonUtilService.translateMessage
+        ('FILE_MANAGER'), 'FILE_MANAGER_PERMISSION_DESCRIPTION', PageId.PROFILE, true
+      );
+      await confirm.present();
+    });
+  }
+
+  openSelfDeclareTeacherForm(type) {
+    if (!this.commonUtilService.networkInfo.isNetworkAvailable) {
+      this.commonUtilService.showToast('NEED_INTERNET_TO_CHANGE');
+    }
+    const telemetryId = type === 'add' ? ID.BTN_I_AM_A_TEACHER : ID.BTN_UPDATE;
+    this.telemetryGeneratorService.generateInteractTelemetry(
+      InteractType.TOUCH,
+      '',
+      Environment.USER,
+      PageId.PROFILE,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      telemetryId
+    );
+
+    this.router.navigate([`/${RouterLinks.PROFILE}/${RouterLinks.SELF_DECLARED_TEACHER_EDIT}/${type}`], {
+      state: {
+        profile: this.profile
+      }
+    });
+  }
+
+  async getSelfDeclaredDetails() {
+
+    if (this.isCustodianOrgId && this.profile && this.profile.declarations && this.profile.declarations.length) {
+      this.selfDeclarationInfo = this.profile.declarations[0];
+      const tenantPersonaList = await this.formAndFrameworkUtilService.getFormFields(
+        FormConstants.TENANT_PERSONAINFO, this.profile.rootOrg.rootOrgId);
+      const tenantConfig: any = tenantPersonaList.find(config => config.code === 'tenant');
+      const tenantDetails = tenantConfig.templateOptions && tenantConfig.templateOptions.options &&
+        tenantConfig.templateOptions.options.find(tenant => tenant.value === this.selfDeclarationInfo.orgId);
+
+      this.personaTenantDeclaration = this.commonUtilService.translateMessage('FRMELEMNTS_LBL_SHARE_DATA_WITH', {
+          '%tenant': (tenantDetails && tenantDetails.label) || ''
+        });
+
+      if (this.selfDeclarationInfo.orgId) {
+        const formConfig = await this.formAndFrameworkUtilService.getFormFields(
+          FormConstants.SELF_DECLARATION, this.selfDeclarationInfo.orgId);
+        const externalIdConfig = formConfig.find(config => config.code === 'externalIds');
+        this.selfDeclaredDetails = [];
+        (externalIdConfig.children as FieldConfig<any>[]).forEach(config => {
+          if (this.profile.declarations[0].info[config.code]) {
+            this.selfDeclaredDetails.push({ name: config.fieldName, value: this.profile.declarations[0].info[config.code] });
+          }
+        });
+      }
+    }
+  }
+
+  shareUsername() {
+    let fullName = this.profile.firstName;
+    if (this.profile.lastName) {
+      fullName = fullName + ' ' + this.profile.lastName;
+    }
+    const translatedMsg = this.commonUtilService.translateMessage('SHARE_USERNAME', {
+      app_name: this.appName,
+      user_name: fullName,
+      diksha_id: this.profile.userName
+    });
+    this.socialSharing.share(translatedMsg);
   }
 
 }

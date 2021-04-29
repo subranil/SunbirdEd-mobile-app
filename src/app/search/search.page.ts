@@ -12,18 +12,20 @@ import {
   CorrelationData, DownloadEventType, DownloadProgress, EventsBusEvent, EventsBusService, PageAssembleCriteria,
   PageAssembleFilter, PageAssembleService, PageName, ProfileType, SearchType, SharedPreferences, TelemetryObject,
   NetworkError, CourseService, CourseBatchesRequest, CourseEnrollmentType, CourseBatchStatus, Course, Batch,
-  FetchEnrolledCourseRequest, Profile, ProfileService, Framework,
+  FetchEnrolledCourseRequest, Profile,
+  ProfileService, Framework,
   FrameworkCategoryCodesGroup,
   FrameworkDetailsRequest,
   FrameworkService,
   FrameworkUtilService,
-  GetSuggestedFrameworksRequest, SearchEntry, SearchHistoryService, SortOrder
+  GetSuggestedFrameworksRequest, SearchEntry,
+  SearchHistoryService, SortOrder,
+  GroupActivity
 } from 'sunbird-sdk';
 import { Map } from '@app/app/telemetryutil';
 import {
   BatchConstants,
-  RouterLinks, AudienceFilter,
-  ContentType, MimeType, Search, ContentCard,
+  RouterLinks, Search, ContentCard,
   ContentFilterConfig
 } from '@app/app/app.constant';
 import { AppGlobalService } from '@app/services/app-global-service.service';
@@ -31,7 +33,9 @@ import { FormAndFrameworkUtilService } from '@app/services/formandframeworkutil.
 import { CommonUtilService } from '@app/services/common-util.service';
 import { TelemetryGeneratorService } from '@app/services/telemetry-generator.service';
 import {
-  Environment, ImpressionType, InteractSubtype, InteractType, LogLevel, Mode, PageId, CorReleationDataType
+  Environment, ImpressionType, InteractSubtype,
+  InteractType, LogLevel, Mode, PageId, CorReleationDataType,
+  AuditType, ImpressionSubtype, ObjectType
 } from '@app/services/telemetry-constants';
 import { AppHeaderService } from '@app/services/app-header.service';
 import { AppVersion } from '@ionic-native/app-version/ngx';
@@ -42,8 +46,14 @@ import { ContentUtil } from '@app/util/content-util';
 import { LibraryCardTypes } from '@project-sunbird/common-consumption';
 import { Subscription, Observable, from } from 'rxjs';
 import { switchMap, tap, map as rxjsMap, share, startWith, debounceTime } from 'rxjs/operators';
-import { applyProfileFilter } from '@app/util/filter.util';
-
+import { SbProgressLoader } from '../../services/sb-progress-loader.service';
+import { applyProfileFilter, updateFilterInSearchQuery } from '@app/util/filter.util';
+import { GroupHandlerService } from '@app/services';
+import { NavigationService } from '@app/services/navigation-handler.service';
+import { CsGroupAddableBloc } from '@project-sunbird/client-services/blocs';
+import { CsContentType } from '@project-sunbird/client-services/services/content';
+import { ProfileHandler } from '@app/services/profile-handler';
+import { FormConstants } from '../form.constants';
 
 declare const cordova;
 @Component({
@@ -57,8 +67,12 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
   showLoading: boolean;
   downloadProgress: any;
   @ViewChild('searchInput') searchBar;
-  contentType: Array<string> = [];
+  primaryCategories: Array<string> = [];
   source: string;
+  groupId: string;
+  activityTypeData: any = {};
+  activityList: GroupActivity[] = [];
+  isFromGroupFlow = false;
   dialCode: string;
   dialCodeResult: Array<any> = [];
   dialCodeContentResult: Array<any> = [];
@@ -78,7 +92,6 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
   contentData: any;
   childContent: any = undefined;
   loadingDisplayText = this.commonUtilService.translateMessage('LOADING_CONTENT');
-  audienceFilter = [];
   eventSubscription?: Subscription;
   displayDialCodeResult: any;
   profile: Profile;
@@ -103,6 +116,11 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
   isProfileUpdated: boolean;
   isQrCodeLinkToContent: any;
   LibraryCardTypes = LibraryCardTypes;
+  initialFilterCriteria: any;
+  showAddToGroupButtons = false;
+  supportedUserTypesConfig: Array<any>;
+  searchFilterConfig: Array<any>;
+  preAppliedFilter: any;
 
   @ViewChild('contentView') contentView: IonContent;
   constructor(
@@ -130,20 +148,31 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
     private popoverCtrl: PopoverController,
     private location: Location,
     private router: Router,
-    private navCtrl: NavController
+    private navCtrl: NavController,
+    private sbProgressLoader: SbProgressLoader,
+    private groupHandlerService: GroupHandlerService,
+    private navService: NavigationService,
+    private profileHandler: ProfileHandler
   ) {
 
     const extras = this.router.getCurrentNavigation().extras.state;
 
     if (extras) {
       this.dialCode = extras.dialCode;
-      this.contentType = extras.contentType;
+      this.primaryCategories = extras.primaryCategories;
       this.corRelationList = extras.corRelation;
       this.source = extras.source;
+      if (this.source === PageId.GROUP_DETAIL) {
+        this.isFromGroupFlow = true;
+      }
+      this.groupId = extras.groupId;
+      this.activityTypeData = extras.activityTypeData;
+      this.activityList = extras.activityList;
       this.enrolledCourses = extras.enrolledCourses;
       this.guestUser = extras.guestUser;
       this.userId = extras.userId;
       this.shouldGenerateEndTelemetry = extras.shouldGenerateEndTelemetry;
+      this.preAppliedFilter = extras.preAppliedFilter;
     }
 
     this.checkUserSession();
@@ -154,22 +183,29 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
     this.selectedLanguageCode = this.translate.currentLang;
   }
 
-  ngOnInit(): void {
+  async ngOnInit() {
     this.getAppName();
+    this.supportedUserTypesConfig = await this.profileHandler.getSupportedUserTypes();
   }
 
-  ionViewWillEnter() {
+  async ionViewWillEnter() {
     this.headerService.hideHeader();
     this.handleDeviceBackButton();
+    this.searchFilterConfig = await this.formAndFrameworkUtilService.getFormFields(FormConstants.SEARCH_FILTER);
+    if ((this.source === PageId.GROUP_DETAIL && this.isFirstLaunch) || this.preAppliedFilter) {
+      this.isFirstLaunch = false;
+      this.handleSearch(true);
+    }
   }
 
   ionViewDidEnter() {
-    if (!this.dialCode && this.isFirstLaunch) {
+    if (!this.dialCode && this.isFirstLaunch && this.source !== PageId.GROUP_DETAIL) {
       setTimeout(() => {
         this.isFirstLaunch = false;
         this.searchBar.setFocus();
       }, 100);
     }
+    this.sbProgressLoader.hide({ id: this.dialCode });
 
     this.checkUserSession();
   }
@@ -185,17 +221,18 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
           return from(this.searchHistoryService.getEntries({
             like: v,
             limit: 5,
-            namespace: this.source === PageId.LIBRARY ? SearchHistoryNamespaces.LIBRARY : SearchHistoryNamespaces.COURSE
+            namespace: SearchHistoryNamespaces.LIBRARY
           }).toPromise());
         }
 
         return from(this.searchHistoryService.getEntries({
           limit: 10,
-          namespace: this.source === PageId.LIBRARY ? SearchHistoryNamespaces.LIBRARY : SearchHistoryNamespaces.COURSE
+          namespace: SearchHistoryNamespaces.LIBRARY
         }).toPromise());
       }),
-      tap((v) => {
+      tap(() => {
         setTimeout(() => {
+          this.showAddToGroupButtons = false;
           this.changeDetectionRef.detectChanges();
         });
       }) as any
@@ -295,41 +332,57 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
   handleDeviceBackButton() {
     this.backButtonFunc = this.platform.backButton.subscribeWithPriority(10, () => {
       this.navigateToPreviousPage();
-      this.telemetryGeneratorService.generateBackClickedTelemetry(ImpressionType.SEARCH,
-        Environment.HOME, false, undefined, this.corRelationList);
+      if (this.displayDialCodeResult && this.displayDialCodeResult[0].dialCodeResult &&
+        this.displayDialCodeResult[0].dialCodeResult.length) {
+        this.telemetryGeneratorService.generateBackClickedNewTelemetry(
+          true,
+          this.source === PageId.ONBOARDING ? Environment.ONBOARDING : Environment.HOME,
+          PageId.QR_BOOK_RESULT
+        );
+      } else {
+        this.telemetryGeneratorService.generateBackClickedTelemetry(ImpressionType.SEARCH,
+          Environment.HOME, false, undefined, this.corRelationList);
+      }
     });
   }
 
   openCollection(collection) {
-    const identifier = collection.identifier;
-    let telemetryObject: TelemetryObject;
-    const objectType = this.telemetryGeneratorService.isCollection(collection.mimeType) ? collection.contentType : ContentType.RESOURCE;
-    telemetryObject = new TelemetryObject(identifier, objectType, undefined);
     const values = new Map();
     values.root = true;
     this.telemetryGeneratorService.generateInteractTelemetry(InteractType.TOUCH,
       InteractSubtype.CONTENT_CLICKED,
       !this.appGlobalService.isOnBoardingCompleted ? Environment.ONBOARDING : Environment.HOME,
       PageId.DIAL_SEARCH,
-      telemetryObject,
+      ContentUtil.getTelemetryObject(collection),
       values,
       undefined,
       this.corRelationList);
     this.showContentDetails(collection, true);
   }
 
-  async openContent(collection, content, index?, isQrCodeLinkToSingleContent?) {
-    this.showLoader = false;
-    this.parentContent = collection;
-    this.isQrCodeLinkToContent = isQrCodeLinkToSingleContent;
-    this.generateInteractEvent(content.identifier, content.contentType, content.pkgVersion, index ? index : 0);
-    if (collection !== undefined) {
-      this.parentContent = collection;
-      this.childContent = content;
-      this.checkParent(collection, content);
+  async openContent(collection, content, index?, isQrCodeLinkToSingleContent?, markAsSelected?) {
+    if (markAsSelected && this.isFromGroupFlow) {
+      this.searchContentResult.forEach((element, idx) => {
+        if (idx === index) {
+          element.selected = true;
+        } else {
+          element.selected = false;
+        }
+      });
+      this.showAddToGroupButtons = true;
     } else {
       this.showLoader = false;
-      await this.checkRetiredOpenBatch(content);
+      this.parentContent = collection;
+      this.isQrCodeLinkToContent = isQrCodeLinkToSingleContent;
+      this.generateInteractEvent(content.identifier, content.contentType, content.pkgVersion, index ? index : 0);
+      if (collection !== undefined) {
+        this.parentContent = collection;
+        this.childContent = content;
+        this.checkParent(collection, content);
+      } else {
+        this.showLoader = false;
+        await this.checkRetiredOpenBatch(content);
+      }
     }
   }
 
@@ -369,81 +422,111 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
       this.appGlobalService.setOnBoardingCompleted();
     }
 
-    if (content.contentType === ContentType.COURSE) {
-      if (!this.guestUser) {
-        this.enrolledCourses = await this.getEnrolledCourses(false, false);
-      } else {
-        this.enrolledCourses = [];
-      }
-      if (this.enrolledCourses && this.enrolledCourses.length) {
-        for (let i = 0; i < this.enrolledCourses.length; i++) {
-          if (content.identifier === this.enrolledCourses[i].courseId) {
-            params.content = this.enrolledCourses[i];
+    switch (ContentUtil.isTrackable(content)) {
+      case 1:
+        if (!this.guestUser) {
+          this.enrolledCourses = await this.getEnrolledCourses(false);
+        } else {
+          this.enrolledCourses = [];
+        }
+        if (this.enrolledCourses && this.enrolledCourses.length) {
+          for (let i = 0; i < this.enrolledCourses.length; i++) {
+            if (content.identifier === this.enrolledCourses[i].courseId) {
+              params.content = this.enrolledCourses[i];
+            }
           }
         }
-      }
-      this.router.navigate([RouterLinks.ENROLLED_COURSE_DETAILS], {
-        state: {
-          content: params.content,
-          corRelation: params.corRelation,
-          isSingleContent: params.isSingleContent,
-          onboarding: params.onboarding,
-          parentContent: params.parentContent,
-          isQrCodeLinkToContent: params.isQrCodeLinkToContent,
-          isOnboardingSkipped: !this.appGlobalService.isOnBoardingCompleted
+        const correlationData: CorrelationData = new CorrelationData();
+        if (this.source === PageId.GROUP_DETAIL) {
+          correlationData.id = PageId.GROUP_DETAIL;
+          correlationData.type = CorReleationDataType.FROM_PAGE;
+          if (params && params.corRelation) {
+            params.corRelation.push(correlationData);
+          }
         }
-      });
-      if (this.isSingleContent) {
-        this.isSingleContent = false;
-        // migration-TODO
-        // const view = this.navCtrl.getActive();
-        // this.navCtrl.removeView(view);
-      }
-    } else if (content.mimeType === MimeType.COLLECTION) {
-      if (this.isDialCodeSearch && !isRootContent) {
-        params.isCreateNavigationStack = true;
-
-        this.navCtrl.navigateForward([RouterLinks.QRCODERESULT], {
-          state: {
+        if (CsGroupAddableBloc.instance.initialised) {
+          this.updateCsGroupAddableBloc(params, PageId.COURSE_DETAIL);
+        }
+        this.navService.navigateToTrackableCollection(
+          {
+            source: this.source,
+            groupId: this.groupId,
+            activityList: this.activityList,
             content: params.content,
             corRelation: params.corRelation,
             isSingleContent: params.isSingleContent,
             onboarding: params.onboarding,
             parentContent: params.parentContent,
-            isProfileUpdated: params.isProfileUpdated,
             isQrCodeLinkToContent: params.isQrCodeLinkToContent,
-            isAvailableLocally: params.isAvailableLocally
+            isOnboardingSkipped: !this.appGlobalService.isOnBoardingCompleted
           }
-        });
+        );
         if (this.isSingleContent) {
           this.isSingleContent = false;
-          // migration-TODO
-          // const view = this.navCtrl.getActive();
-          // this.navCtrl.removeView(view);
         }
+        break;
+      case 0:
+        if (this.isDialCodeSearch && !isRootContent) {
+          params.isCreateNavigationStack = true;
 
-      } else {
-        this.router.navigate([RouterLinks.COLLECTION_DETAIL_ETB], {
-          state: {
+          const corRelationList: Array<CorrelationData> = [];
+          corRelationList.push({ id: this.dialCode, type: CorReleationDataType.QR });
+
+          const telemetryObject = new TelemetryObject(content.identifier, ObjectType.TEXTBOOK, undefined);
+          this.telemetryGeneratorService.generateInteractTelemetry(
+            InteractType.SELECT_BOOK, '',
+            this.source === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME,
+            PageId.QR_BOOK_RESULT,
+            telemetryObject,
+            undefined, undefined,
+            corRelationList
+          );
+
+          this.navCtrl.navigateForward([RouterLinks.QRCODERESULT], {
+            state: {
+              content: params.content,
+              corRelation: params.corRelation,
+              isSingleContent: params.isSingleContent,
+              onboarding: params.onboarding,
+              parentContent: params.parentContent,
+              isProfileUpdated: params.isProfileUpdated,
+              isQrCodeLinkToContent: params.isQrCodeLinkToContent,
+              isAvailableLocally: params.isAvailableLocally,
+              source: params.source,
+              dialCode: this.dialCode
+            }
+          });
+          if (this.isSingleContent) {
+            this.isSingleContent = false;
+          }
+        } else {
+          if (CsGroupAddableBloc.instance.initialised) {
+            this.updateCsGroupAddableBloc(params, PageId.COLLECTION_DETAIL);
+          }
+          this.navService.navigateToCollection({
+            source: this.source,
+            groupId: this.groupId,
+            activityList: this.activityList,
             content: params.content,
             corRelation: params.corRelation,
             isSingleContent: params.isSingleContent,
             onboarding: params.onboarding,
             parentContent: params.parentContent
-          }
-        });
-
-      }
-    } else {
-      this.router.navigate([RouterLinks.CONTENT_DETAILS], {
-        state: {
+          });
+        }
+        break;
+      case -1:
+        if (CsGroupAddableBloc.instance.initialised) {
+          this.updateCsGroupAddableBloc(params, PageId.CONTENT_DETAIL);
+        }
+        this.navService.navigateToContent({
           content: params.content,
           corRelation: params.corRelation,
           isSingleContent: params.isSingleContent,
           onboarding: params.onboarding,
           parentContent: params.parentContent
-        }
-      });
+        });
+        break;
     }
   }
 
@@ -601,7 +684,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
                     this.setCurrentProfile(0, data);
                   }
                 }).catch((err) => {
-                  if (err instanceof NetworkError) {
+                  if (NetworkError.isInstance(err)) {
                     this.commonUtilService.showToast('ERROR_OFFLINE_MODE');
                   }
                 });
@@ -611,7 +694,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
           });
         })
         .catch((err) => {
-          if (err instanceof NetworkError) {
+          if (NetworkError.isInstance(err)) {
             this.commonUtilService.showToast('ERROR_OFFLINE_MODE');
           }
         });
@@ -664,29 +747,48 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
       InteractSubtype.FILTER_BUTTON_CLICKED,
       Environment.HOME,
       this.source, undefined);
-    this.formAndFrameworkUtilService.getLibraryFilterConfig().then((data) => {
-      const filterCriteriaData = this.responseData.filterCriteria;
-      filterCriteriaData.facetFilters.forEach(element => {
-        data.forEach(item => {
-          if (element.name === item.code) {
-            element.translatedName = this.commonUtilService.getTranslatedValue(item.translations, item.name);
+    const filterCriteriaData = this.responseData.filterCriteria;
+    filterCriteriaData.facetFilters.forEach(element => {
+      this.searchFilterConfig.forEach(item => {
+        if (element.name === item.code) {
+          element.translatedName = this.commonUtilService.getTranslatedValue(item.translations, item.name);
+          return;
+        }
+      });
+
+      this.initialFilterCriteria.facetFilters.forEach(newElement => {
+        this.searchFilterConfig.forEach(item => {
+          if (newElement.name === item.code) {
+            newElement.translatedName = this.commonUtilService.getTranslatedValue(item.translations, item.name);
             return;
           }
         });
       });
       this.router.navigate(['/filters'], {
         state: {
-          filterCriteria: this.responseData.filterCriteria
+          filterCriteria: this.responseData.filterCriteria,
+          initialfilterCriteria: this.initialFilterCriteria,
+          supportedUserTypesConfig: this.supportedUserTypesConfig,
+          source: this.source
         }
       });
     });
   }
 
   applyFilter() {
+    this.showAddToGroupButtons = false;
     this.showLoader = true;
     this.responseData.filterCriteria.mode = 'hard';
     this.responseData.filterCriteria.searchType = SearchType.FILTER;
-    this.contentService.searchContent(this.responseData.filterCriteria).toPromise()
+    const modifiedCriteria = JSON.parse(JSON.stringify(this.responseData.filterCriteria));
+    modifiedCriteria.facetFilters.forEach(facet => {
+      if (facet.values && facet.values.length > 0) {
+        if (facet.name === 'audience') {
+          facet.values = ContentUtil.getAudienceFilter(facet, this.supportedUserTypesConfig);
+        }
+      }
+    });
+    this.contentService.searchContent(modifiedCriteria).toPromise()
       .then((responseData: ContentSearchResult) => {
 
         this.zone.run(() => {
@@ -697,7 +799,6 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
               this.processDialCodeResult(responseData.contentDataList);
             } else {
               this.searchContentResult = responseData.contentDataList;
-
               this.isEmptyResult = !(this.searchContentResult && this.searchContentResult.length > 0);
               const values = new Map();
               values.from = this.source;
@@ -726,41 +827,78 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
     this.isEmptyResult = false;
   }
 
-  handleSearch() {
+  handleSearch(shouldApplyProfileFilter = false) {
     this.scrollToTop();
-    if (this.searchKeywords.length < 3) {
+    if (this.searchKeywords.length < 3 && this.source !== PageId.GROUP_DETAIL && !this.preAppliedFilter) {
       return;
     }
-
+    this.showAddToGroupButtons = false;
     this.addSearchHistoryEntry();
 
     this.showLoader = true;
 
     (window as any).cordova.plugins.Keyboard.close();
-
+    const facets = this.searchFilterConfig.reduce((acc, filterConfig) => {
+      acc.push(filterConfig.code);
+      return acc;
+    }, []);
     const contentSearchRequest: ContentSearchCriteria = {
       searchType: SearchType.SEARCH,
       query: this.searchKeywords,
-      contentTypes: this.contentType,
-      facets: Search.FACETS,
-      audience: this.audienceFilter,
+      primaryCategories: this.primaryCategories,
+      facets: facets ? facets : Search.FACETS,
       mode: 'soft',
       framework: this.currentFrameworkId,
-      languageCode: this.selectedLanguageCode
+      languageCode: this.selectedLanguageCode,
     };
+
+    if (this.profile && this.source === PageId.GROUP_DETAIL && shouldApplyProfileFilter) {
+      if (this.profile.board && this.profile.board.length) {
+        contentSearchRequest.board = applyProfileFilter(this.appGlobalService, this.profile.board,
+          contentSearchRequest.board, 'board');
+      }
+
+      if (this.profile.medium && this.profile.medium.length) {
+        contentSearchRequest.medium = applyProfileFilter(this.appGlobalService, this.profile.medium,
+          contentSearchRequest.medium, 'medium');
+      }
+
+      if (this.profile.grade && this.profile.grade.length) {
+        contentSearchRequest.grade = applyProfileFilter(this.appGlobalService, this.profile.grade,
+          contentSearchRequest.grade, 'gradeLevel');
+      }
+    }
 
     this.isDialCodeSearch = false;
 
     this.dialCodeContentResult = undefined;
     this.dialCodeResult = undefined;
     this.corRelationList = [];
-
-    this.contentService.searchContent(contentSearchRequest).toPromise()
+    let searchQuery;
+    if (this.activityTypeData ||  this.preAppliedFilter) {
+      const query = this.activityTypeData ? this.activityTypeData.searchQuery :
+      JSON.stringify({ request:  this.preAppliedFilter });
+      searchQuery = updateFilterInSearchQuery(query, undefined, false);
+      searchQuery.request.query = this.searchKeywords;
+      searchQuery.request.facets = contentSearchRequest.facets;
+      searchQuery.request.mode = contentSearchRequest.mode;
+      searchQuery.request.searchType = SearchType.FILTER;
+      const profileFilters = {
+        board: contentSearchRequest.board || [],
+        medium: contentSearchRequest.medium || [],
+        gradeLevel: contentSearchRequest.grade || []
+      };
+      searchQuery.request.filters = { ...searchQuery.request.filters, ...profileFilters }
+    }
+    this.contentService.searchContent(contentSearchRequest, searchQuery).toPromise()
       .then((response: ContentSearchResult) => {
         this.zone.run(() => {
           this.responseData = response;
+          this.preAppliedFilter = undefined;
           if (response) {
-
+            if (!this.initialFilterCriteria) {
+              this.initialFilterCriteria = JSON.parse(JSON.stringify(this.responseData.filterCriteria));
+            }
             this.addCorRelation(response.responseMessageId, 'API');
             this.searchContentResult = response.contentDataList;
             this.isEmptyResult = !this.searchContentResult || this.searchContentResult.length === 0;
@@ -790,10 +928,13 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private addSearchHistoryEntry() {
+    if (!this.searchKeywords) {
+      return;
+    }
     this.searchHistoryService
       .addEntry({
         query: this.searchKeywords,
-        namespace: this.source === PageId.LIBRARY ? SearchHistoryNamespaces.LIBRARY : SearchHistoryNamespaces.COURSE
+        namespace: SearchHistoryNamespaces.LIBRARY
       })
       .toPromise();
   }
@@ -805,7 +946,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
     this.loader.onDidDismiss(() => { this.loader = undefined; });
     let retiredBatches: Array<any> = [];
     let anyOpenBatch = false;
-    await this.getEnrolledCourses(false, true);
+    await this.getEnrolledCourses(true);
     this.enrolledCourses = this.enrolledCourses || [];
     if (layoutName !== ContentCard.LAYOUT_INPROGRESS) {
       retiredBatches = this.enrolledCourses.filter((element) => {
@@ -834,7 +975,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
       filters: {
         courseId: layoutName === ContentCard.LAYOUT_INPROGRESS ? content.contentId : content.identifier,
         enrollmentType: CourseEnrollmentType.OPEN,
-        status: [CourseBatchStatus.NOT_STARTED, CourseBatchStatus.IN_PROGRESS]
+        status: [CourseBatchStatus.IN_PROGRESS]
       },
       sort_by: { createdDate: SortOrder.DESC },
       fields: BatchConstants.REQUIRED_FIELDS
@@ -849,7 +990,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
             this.zone.run(async () => {
               this.batches = res;
               if (this.batches.length) {
-                this.batches.forEach((batch, key) => {
+                this.batches.forEach((batch) => {
                   if (batch.status === 1) {
                     ongoingBatches.push(batch);
                   } else {
@@ -867,7 +1008,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
                     upcommingBatches,
                     ongoingBatches,
                     retiredBatched,
-                    courseId: content.identifier
+                    content
                   },
                   cssClass: 'enrollement-popover'
                 });
@@ -922,14 +1063,14 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
 
     this.showLoader = true;
 
-    const contentTypes = await this.formAndFrameworkUtilService.getSupportedContentFilterConfig(
+    const primaryCategories = await this.formAndFrameworkUtilService.getSupportedContentFilterConfig(
       ContentFilterConfig.NAME_DIALCODE);
-    this.contentType = contentTypes;
+    this.primaryCategories = primaryCategories;
 
     // Page API START
     const pageAssemblefilter: PageAssembleFilter = {};
     pageAssemblefilter.dialcodes = this.dialCode;
-    pageAssemblefilter.contentType = this.contentType;
+    pageAssemblefilter.primaryCategory = this.primaryCategories;
 
     const pageAssembleCriteria: PageAssembleCriteria = {
       name: PageName.DIAL_CODE,
@@ -940,7 +1081,6 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
     if (this.profile && this.profile.board && this.profile.board.length) {
       pageAssembleCriteria.userProfile = { board: applyProfileFilter(this.appGlobalService, this.profile.board, [], 'board') };
     }
-    // pageAssembleCriteria.hardRefresh = true;
 
     this.pageService.getPageAssemble(pageAssembleCriteria).toPromise()
       .then((res: any) => {
@@ -949,22 +1089,31 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
           if (sections && sections.length) {
             this.addCorRelation(sections[0].resmsgId, 'API');
             this.processDialCodeResult(sections);
-            // this.updateFilterIcon();  // TO DO
           }
           this.showLoader = false;
         });
-      }).catch(error => {
+      }).catch(() => {
         this.zone.run(() => {
           this.showLoader = false;
           if (!this.commonUtilService.networkInfo.isNetworkAvailable) {
             this.commonUtilService.showToast('ERROR_OFFLINE_MODE');
+            const corRelationList: Array<CorrelationData> = [];
+            corRelationList.push({ id: this.dialCode, type: CorReleationDataType.QR });
+
+            this.telemetryGeneratorService.generateImpressionTelemetry(
+              AuditType.TOAST_SEEN,
+              ImpressionSubtype.OFFLINE_MODE,
+              PageId.SCAN_OR_MANUAL,
+              this.source === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME,
+              undefined, undefined, undefined, undefined,
+              corRelationList
+            );
           } else {
             this.commonUtilService.showToast('SOMETHING_WENT_WRONG');
           }
           this.location.back();
         });
       });
-    // Page API END
   }
 
   generateInteractEvent(identifier, contentType, pkgVersion, index) {
@@ -1058,7 +1207,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
         const dialCodeContentResult = [];
         const dialCodeContentCourseResult = []; // content type course
         contentArray.forEach((content) => {
-          if (content.contentType === ContentType.COURSE) {
+          if (content.contentType === CsContentType.COURSE) {
             dialCodeContentCourseResult.push(content);
           } else if (addedContent.indexOf(content.identifier) < 0) {
             dialCodeContentResult.push(content);
@@ -1078,7 +1227,9 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
           displayDialCodeResult.push(dialCodeCourseResultObj);
         }
       }
-
+      if (displayDialCodeResult.length && displayDialCodeResult[0].dialCodeResult) {
+        this.generateImpressionEvent(displayDialCodeResult[0].dialCodeResult);
+      }
       let isParentCheckStarted = false;
       if (dialCodeResultObj.dialCodeResult.length === 1 && dialCodeResultObj.dialCodeResult[0].content.length === 1
         && isAllContentMappedToCollection) {
@@ -1106,7 +1257,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
         '',
         PageId.DIAL_NOT_LINKED,
         Environment.HOME);
-      this.commonUtilService.showContentComingSoonAlert(this.source);
+      this.commonUtilService.showContentComingSoonAlert(this.source, undefined, this.dialCode);
     }
   }
 
@@ -1184,7 +1335,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
           });
         }
       }).catch((err) => {
-        if (err instanceof NetworkError) {
+        if (NetworkError.isInstance(err)) {
           this.commonUtilService.showToast('ERROR_OFFLINE_MODE');
         }
       });
@@ -1236,7 +1387,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
         });
       })
       .catch((err) => {
-        if (err instanceof NetworkError) {
+        if (NetworkError.isInstance(err)) {
           this.commonUtilService.showToast('ERROR_OFFLINE_MODE');
           this.showLoading = false;
           this.isDownloadStarted = false;
@@ -1350,18 +1501,6 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   checkUserSession() {
-    const isGuestUser = !this.appGlobalService.isUserLoggedIn();
-
-    if (isGuestUser) {
-      const userType = this.appGlobalService.getGuestUserType();
-      if (userType === ProfileType.STUDENT) {
-        this.audienceFilter = AudienceFilter.GUEST_STUDENT;
-      } else if (this.commonUtilService.isAccessibleForNonStudentRole(userType)) {
-        this.audienceFilter = AudienceFilter.GUEST_TEACHER;
-      }
-    } else {
-      this.audienceFilter = AudienceFilter.LOGGED_IN_USER;
-    }
     this.profile = this.appGlobalService.getCurrentUser();
   }
 
@@ -1375,13 +1514,28 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
     this.corRelationList.push(corRelation);
   }
 
-  private generateImpressionEvent() {
-    this.telemetryGeneratorService.generateImpressionTelemetry(
-      ImpressionType.SEARCH, '',
-      this.source ? this.source : PageId.SEARCH,
-      Environment.HOME, '', '', '',
-      undefined,
-      this.corRelationList);
+  private generateImpressionEvent(dialCodeResult?) {
+    if (dialCodeResult && dialCodeResult.length) {
+      const corRelationList: Array<CorrelationData> = [];
+      corRelationList.push({ id: this.dialCode, type: CorReleationDataType.QR });
+      corRelationList.push({ id: dialCodeResult.length.toString(), type: CorReleationDataType.COUNT_BOOK });
+      this.telemetryGeneratorService.generatePageLoadedTelemetry(
+        PageId.QR_BOOK_RESULT,
+        this.source === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        corRelationList
+      );
+    } else {
+      this.telemetryGeneratorService.generateImpressionTelemetry(
+        ImpressionType.SEARCH, '',
+        this.source ? this.source : PageId.SEARCH,
+        Environment.HOME, '', '', '',
+        undefined,
+        this.corRelationList);
+    }
   }
 
   private generateLogEvent(searchResult) {
@@ -1405,7 +1559,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
    *
    * It internally calls course handler of genie sdk
    */
-  private getEnrolledCourses(refreshEnrolledCourses: boolean = true, returnRefreshedCourses: boolean = false): Promise<any> {
+  private getEnrolledCourses(returnRefreshedCourses: boolean = false): Promise<any> {
     this.showLoader = true;
     const option: FetchEnrolledCourseRequest = {
       userId: this.userId,
@@ -1428,7 +1582,7 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
           });
           return enrolledCourses;
         }
-      }, (err) => {
+      }, () => {
         this.showLoader = false;
         return [];
       });
@@ -1439,23 +1593,84 @@ export class SearchPage implements OnInit, AfterViewInit, OnDestroy {
   }
 
   goBack() {
-    this.telemetryGeneratorService.generateBackClickedTelemetry(ImpressionType.SEARCH,
-      Environment.HOME, true, undefined, this.corRelationList);
+    if (this.displayDialCodeResult && this.displayDialCodeResult[0].dialCodeResult && this.displayDialCodeResult[0].dialCodeResult.length) {
+      this.telemetryGeneratorService.generateBackClickedNewTelemetry(
+        false,
+        this.source === PageId.ONBOARDING_PROFILE_PREFERENCES ? Environment.ONBOARDING : Environment.HOME,
+        PageId.QR_BOOK_RESULT
+      );
+    } else {
+      this.telemetryGeneratorService.generateBackClickedTelemetry(ImpressionType.SEARCH,
+        Environment.HOME, true, undefined, this.corRelationList);
+    }
     this.navigateToPreviousPage();
   }
 
-  getContentCount(resultlist) {
+  getContentCount(displayDialCodeResult) {
     let totalCount = 0;
-    if (resultlist.dialCodeResult.length) {
-      for (let i = 0; i < resultlist.dialCodeResult.length; i++) {
-        if (resultlist.dialCodeResult[i].content && resultlist.dialCodeResult[i].content.length) {
-          totalCount += resultlist.dialCodeResult[i].content.length;
+    displayDialCodeResult.forEach(resultlist => {
+      if (resultlist.dialCodeResult.length) {
+        for (let i = 0; i < resultlist.dialCodeResult.length; i++) {
+          if (resultlist.dialCodeResult[i].content && resultlist.dialCodeResult[i].content.length) {
+            totalCount += resultlist.dialCodeResult[i].content.length;
+          }
         }
       }
-    }
-    if (resultlist.dialCodeContentResult.length) {
-      totalCount += resultlist.dialCodeContentResult.length;
-    }
+      if (resultlist.dialCodeContentResult.length) {
+        totalCount += resultlist.dialCodeContentResult.length;
+      }
+    });
     return totalCount;
   }
+
+  async addActivityToGroup() {
+    const content = this.searchContentResult.find((c) => c.selected);
+    if (this.activityList) {
+      const activityExist = this.activityList.find(activity => activity.id === content.identifier);
+      if (activityExist) {
+        this.commonUtilService.showToast('ACTIVITY_ALREADY_ADDED_IN_GROUP');
+        return;
+      }
+    }
+    this.groupHandlerService.addActivityToGroup(
+      this.groupId,
+      content.identifier,
+      this.activityTypeData.activityType,
+      PageId.SEARCH,
+      this.corRelationList,
+      -2);
+  }
+
+  openSelectedContent() {
+    let index = 0;
+    let content;
+    this.searchContentResult.forEach((element, idx) => {
+      if (element.selected) {
+        index = idx;
+        content = element;
+      }
+    });
+    this.openContent(undefined, content, index, undefined, false);
+  }
+
+  private updateCsGroupAddableBloc(params, pageId) {
+    const cData = {
+      type: CorReleationDataType.GROUP_ID,
+      id: CsGroupAddableBloc.instance.state.groupId
+    }
+    params.corRelation.push(cData)
+    CsGroupAddableBloc.instance.updateState(
+      {
+        pageIds: [pageId],
+        groupId: CsGroupAddableBloc.instance.state.groupId,
+        params: {
+          ...CsGroupAddableBloc.instance.state.params,
+          corRelation: params.corRelation,
+          noOfPagesToRevertOnSuccess: -3,
+          activityType: this.activityTypeData.activityType
+        }
+      }
+    );
+  }
+
 }

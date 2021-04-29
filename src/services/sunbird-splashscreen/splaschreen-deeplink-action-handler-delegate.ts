@@ -1,7 +1,14 @@
-import { ContentFilterConfig, PreferenceKey, ProfileConstants, appLanguages } from '@app/app/app.constant';
+import {
+  ContentFilterConfig,
+  PreferenceKey,
+  ProfileConstants,
+  appLanguages,
+  ProgressPopupContext,
+  IgnoreTelemetryPatters
+} from '@app/app/app.constant';
 import { Inject, Injectable } from '@angular/core';
-import { Router } from '@angular/router';
-import { Events, PopoverController } from '@ionic/angular';
+import { Router, NavigationExtras } from '@angular/router';
+import { Events } from '@ionic/angular';
 import { Observable, of } from 'rxjs';
 import {
   PageAssembleService,
@@ -20,42 +27,54 @@ import {
   FrameworkCategoryCodesGroup,
   ProfileSource,
   CorrelationData,
-  TelemetryObject
- } from 'sunbird-sdk';
+  TelemetryObject,
+  TelemetryService,
+  ContentDetailRequest,
+  ChildContentRequest,
+  ContentImportRequest,
+  StorageService,
+  ContentImport,
+  Rollup,
+  FetchEnrolledCourseRequest,
+  CourseService
+} from 'sunbird-sdk';
 import { SplashscreenActionHandlerDelegate } from './splashscreen-action-handler-delegate';
-import { ContentType, MimeType, EventTopics, RouterLinks, LaunchType } from '../../app/app.constant';
+import { MimeType, EventTopics, RouterLinks, LaunchType } from '../../app/app.constant';
 import { AppGlobalService } from '../app-global-service.service';
 import { TelemetryGeneratorService } from '@app/services/telemetry-generator.service';
 import { CommonUtilService } from '@app/services/common-util.service';
 import { PageId, InteractType, Environment, ID, CorReleationDataType } from '../telemetry-constants';
 import { AppVersion } from '@ionic-native/app-version/ngx';
 import { UtilityService } from '../utility-service';
-import { SbPopoverComponent } from '@app/app/components/popups/sb-popover/sb-popover.component';
 import { LoginHandlerService } from '../login-handler.service';
 import { TranslateService } from '@ngx-translate/core';
-import { FormAndFrameworkUtilService } from '../formandframeworkutil.service';
 import { QRScannerResultHandler } from '../qrscanresulthandler.service';
-import { ExternalChannelOverrideListener } from './external-channel-override-interface';
-import { initTabs, GUEST_TEACHER_TABS } from '@app/app/module.service';
-import { ContainerService } from '../container.services';
 import { ContentUtil } from '@app/util/content-util';
 import * as qs from 'qs';
+import { SbProgressLoader, Context as SbProgressLoaderContext } from '../sb-progress-loader.service';
+import { Location } from '@angular/common';
+import { NavigationService } from '../navigation-handler.service';
+import { CsPrimaryCategory } from '@project-sunbird/client-services/services/content';
+import { ContentInfo } from '../content/content-info';
+import { ContentPlayerHandler } from '../content/player/content-player-handler';
 
 @Injectable()
-export class SplaschreenDeeplinkActionHandlerDelegate implements SplashscreenActionHandlerDelegate, ExternalChannelOverrideListener {
-  private savedUrl: any;
+export class SplaschreenDeeplinkActionHandlerDelegate implements SplashscreenActionHandlerDelegate {
+  private savedPayloadUrl: any;
 
-  private _isDelegateReady = false;
   private isOnboardingCompleted = false;
-  private loginPopup: any;
   private currentAppVersionCode: number;
+  private progressLoaderId: string;
+  private childContent;
+  private isChildContentFound;
+  private enableRootNavigation = false;
+  private _context: any;
 
   // should delay the deeplinks until tabs is loaded- gets triggered from Resource components
   set isDelegateReady(val: boolean) {
-    this._isDelegateReady = val;
-    if (val && this.savedUrl) {
-      this.checkDeeplinkMatch(this.savedUrl);
-      this.savedUrl = null;
+    if (val && this.savedPayloadUrl) {
+      this.handleDeeplink(this.savedPayloadUrl);
+      this.savedPayloadUrl = null;
     }
   }
 
@@ -67,6 +86,9 @@ export class SplaschreenDeeplinkActionHandlerDelegate implements SplashscreenAct
     @Inject('PAGE_ASSEMBLE_SERVICE') private pageAssembleService: PageAssembleService,
     @Inject('FRAMEWORK_SERVICE') private frameworkService: FrameworkService,
     @Inject('FRAMEWORK_UTIL_SERVICE') private frameworkUtilService: FrameworkUtilService,
+    @Inject('TELEMETRY_SERVICE') private telemetryService: TelemetryService,
+    @Inject('STORAGE_SERVICE') private storageService: StorageService,
+    @Inject('COURSE_SERVICE') private courseService: CourseService,
     private telemetryGeneratorService: TelemetryGeneratorService,
     private commonUtilService: CommonUtilService,
     private appGlobalServices: AppGlobalService,
@@ -74,79 +96,252 @@ export class SplaschreenDeeplinkActionHandlerDelegate implements SplashscreenAct
     private router: Router,
     private appVersion: AppVersion,
     private utilityService: UtilityService,
-    private popoverCtrl: PopoverController,
     private loginHandlerService: LoginHandlerService,
     public translateService: TranslateService,
-    private formFrameWorkUtilService: FormAndFrameworkUtilService,
     private qrScannerResultHandler: QRScannerResultHandler,
-    private container: ContainerService
+    private sbProgressLoader: SbProgressLoader,
+    private location: Location,
+    private navService: NavigationService,
+    private contentPlayerHandler: ContentPlayerHandler
   ) {
     this.eventToSetDefaultOnboardingData();
-   }
+  }
 
-  onAction(payload: any): Observable<undefined> {
+  set context(context) {
+    this._context = context;
+  }
+
+  get context() {
+    return this._context;
+  }
+
+  onAction(payload: any, context?): Observable<undefined> {
+    if (context) {
+      this.context = context;
+    }
     if (payload && payload.url) {
-      this.checkDeeplinkMatch(payload.url);
+      this.handleDeeplink(payload.url);
     }
     return of(undefined);
   }
 
-  private async checkDeeplinkMatch(url: string) {
-    const dialCode = await this.qrScannerResultHandler.parseDialCode(url);
-    const urlRegex = new RegExp(await this.formFrameWorkUtilService.getDeeplinkRegexFormApi());
-    const urlMatch = url.match(urlRegex);
-
-    const payload = { url };
-
-    const cData: CorrelationData[] = this.generateUtmTelemetryEvent(urlMatch, dialCode, url);
-
-    // checks if the channel slug is present, else the normal deeplink flow executes
-    if (await this.checkCourseChannelSlug(payload, urlMatch, cData)) {
-      return;
-    }
-
-    if ((urlMatch && urlMatch.groups) || dialCode) {
-      this.checkIfOnboardingComplete(urlMatch, dialCode, url, cData);
+  // This method is called only when the user redirects directly from the Playstore
+  checkUtmContent(utmVal: string): void {
+    const utmRegex = new RegExp(String.raw`(?:utm_content=(?<utm_content>[^&]*))`);
+    const res = utmRegex.exec(utmVal);
+    if (res && res.groups && res.groups.utm_content && res.groups.utm_content.length) {
+      const payload = { url: res.groups.utm_content };
+      this.onAction(payload);
     }
   }
 
-  private async checkIfOnboardingComplete(urlMatch, dialCode, inputUrl, cData?) {
-    if (!this.isOnboardingCompleted) {
+  private async handleDeeplink(payloadUrl: string) {
+    const dialCode = await this.qrScannerResultHandler.parseDialCode(payloadUrl);
+
+    // const urlRegex = new RegExp(await this.formFrameWorkUtilService.getDeeplinkRegexFormApi());
+    // const urlMatch = payloadUrl.match(urlRegex);
+
+    // TODO: Is supported URL or not.
+    // Assumptions priority cannot have value as 0 and two simiar urls should not have same priority level;
+
+    const deepLinkUrlConfig: { name: string, code: string, values: string, route: string, priority?: number }[] = [
+      {
+        name: 'Dialcode parser',
+        code: 'dialcode',
+        values: '(\\/dial\\/(?<sunbird>[a-zA-Z0-9]+)|(\\/QR\\/\\?id=(?<epathshala>[a-zA-Z0-9]+)))',
+        route: 'search'
+      },
+      {
+        name: 'content deatil',
+        code: 'contentDetail',
+        values: '(?:\\/(?:resources\\/play\\/content|play\\/content|play\\/quiz)\\/(?<quizId>\\w+))',
+        route: 'content-details'
+      },
+      {
+        name: 'Textbook detail',
+        code: 'textbookDetail',
+        values: '(?:\\/play\\/(?:collection)\\/(?<content_id>\\w+))',
+        route: 'collection-detail-etb',
+        priority: 2
+      },
+      {
+        name: 'Textbook content detail',
+        code: 'textbookContentDetail',
+        values: '(?:\\/play\\/(?:collection)\\/(?<content_id>\\w+)\\?(?=.*\\bcontentId\\b=(?<contentId>([^&]*)).*))',
+        route: 'collection-detail-etb',
+        priority: 1
+      },
+      {
+        name: 'Course Detail',
+        code: 'courseDetail',
+        values: '(?:\\/(?:explore-course|learn)\\/course\\/(?<course_id>\\w+))',
+        route: 'enrolled-course-details',
+        priority: 3
+      },
+      {
+        name: 'Module Detail',
+        code: 'moduleDetail',
+        values: '(?:\\/(?:explore-course|learn)\\/course\\/(?<course_id>\\w+)\\?(?=.*\\bmoduleId\\b=(?<moduleId>([^&]*)).*))',
+        route: 'module-details',
+        priority: 1
+      },
+      {
+        name: 'Course Content Detail',
+        code: 'courseContentDetail',
+        values: '(?:\\/(?:explore-course|learn)\\/course\\/(?<course_id>\\w+)\\?(?=.*\\bcontentId\\b=(?<contentId>([^&]*)).*))',
+        route: 'course-content-details',
+        priority: 2
+      },
+      {
+        name: 'Course tab',
+        code: 'courseTab',
+        values: '^.*explore-course(\\?.*|$)',
+        route: 'tabs/courses',
+        priority: 4
+      },
+      {
+        name: 'Library',
+        code: 'library',
+        values: '\\/(resources|explore)$',
+        route: 'tabs/resources'
+      }
+    ];
+
+    let matchedDeeplinkConfig: { name: string, code: string, values: string, route: string, priority?: number } = null;
+    let urlMatch;
+
+    deepLinkUrlConfig.forEach(config => {
+      const urlRegexMatch = payloadUrl.match(new RegExp(config.values));
+      if (!!urlRegexMatch) {
+        if (!matchedDeeplinkConfig ||
+          (matchedDeeplinkConfig && !matchedDeeplinkConfig.priority && config.priority) ||
+          (matchedDeeplinkConfig && matchedDeeplinkConfig.priority
+            && config.priority && matchedDeeplinkConfig.priority > config.priority)) {
+          matchedDeeplinkConfig = config;
+          urlMatch = urlRegexMatch;
+        }
+      }
+    });
+
+    if (!matchedDeeplinkConfig) {
+      // TODO, toast message
+      return;
+    }
+
+    let identifier;
+    if (urlMatch && urlMatch.groups && Object.keys(urlMatch.groups).length) {
+      identifier = urlMatch.groups.quizId || urlMatch.groups.content_id || urlMatch.groups.course_id;
+    }
+
+    await this.sbProgressLoader.show(this.generateProgressLoaderContext(payloadUrl, identifier, dialCode));
+
+    this.generateUtmTelemetryEvent(identifier, dialCode, payloadUrl);
+
+    // Read version code from deeplink.
+    const requiredVersionCode = this.getQueryParamValue(payloadUrl, 'vCode');
+    // Check if deelink is compatible with the current app.
+    if (requiredVersionCode && !(await this.isAppCompatible(requiredVersionCode))) {
+      this.closeProgressLoader();
+      this.upgradeAppPopover(requiredVersionCode);
+    } else {
       this.isOnboardingCompleted =
         (await this.preferences.getString(PreferenceKey.IS_ONBOARDING_COMPLETED).toPromise() === 'true') ? true : false;
-    }
-    const session = await this.authService.getSession().toPromise();
 
-    const url = new URL(inputUrl);
-    // Read version code from deeplink.
-    const requiredVersionCode = url.searchParams.get('vCode');
-    let content = null;
+      // const session = await this.authService.getSession().toPromise();
 
-    // checking only for quizId or content Id, since only contents can be considered as quiz.
-    if (urlMatch && urlMatch.groups && (urlMatch.groups.quizId || urlMatch.groups.contentId || urlMatch.groups.courseId)) {
-      content = await this.getContentData(urlMatch.groups.quizId || urlMatch.groups.contentId || urlMatch.groups.courseId);
-      if (!content && !dialCode) { return; }
+      // If onboarding not completed
+      if (!this.isOnboardingCompleted) {  // && !session
+        // skip info popup
+        this.appGlobalServices.skipCoachScreenForDeeplink = true;
+        this.enableRootNavigation = true;
+
+        // Set onboarding data if available in query params. e.g. channel, role, lang
+        await this.setOnboradingData(payloadUrl);
+      }
+
+      this.handleNavigation(payloadUrl, identifier, dialCode, matchedDeeplinkConfig.route);
     }
-    if (requiredVersionCode && !(await this.isAppCompatible(requiredVersionCode))) {
-      this.upgradeAppPopover(requiredVersionCode);
-    } else if (this.isOnboardingCompleted || session) {
-      this.handleNavigation(urlMatch, content, dialCode, inputUrl, cData);
-    } else if (content && content.contentType === ContentType.COURSE.toLowerCase()) {
-      const params = {
-        userType: ProfileType.OTHER
-      };
-      this.setDefaultOnboardingData(params);
-      this.router.navigate([RouterLinks.ENROLLED_COURSE_DETAILS],
-        {
-          state: {
-            content,
-            isOnboardingSkipped: true,
-            corRelation: this.getCorrelationList(urlMatch.input, cData)
+  }
+
+  private generateProgressLoaderContext(url, identifier, dialCode): SbProgressLoaderContext {
+    if (this.progressLoaderId) {
+      this.closeProgressLoader();
+    }
+    this.progressLoaderId = dialCode || identifier || ProgressPopupContext.DEEPLINK;
+    const deeplinkUrl: URL = new URL(url);
+    const channelSlug = deeplinkUrl.searchParams.get('channel');
+    if (channelSlug) {
+      return {
+        id: this.progressLoaderId,
+        ignoreTelemetry: {
+          when: {
+            interact: IgnoreTelemetryPatters.IGNORE_DEEPLINK_PAGE_ID_EVENTS,
+            impression: IgnoreTelemetryPatters.IGNORE_CHANNEL_IMPRESSION_EVENTS
           }
-        });
-    } else {
-      this.checkForDeeplinkWithoutOnboarding(content, inputUrl);
+        }
+      };
+    } else if (dialCode) {
+      return {
+        id: this.progressLoaderId,
+        ignoreTelemetry: {
+          when: {
+            interact: IgnoreTelemetryPatters.IGNORE_DIAL_CODE_PAGE_ID_EVENTS,
+            impression: IgnoreTelemetryPatters.IGNORE_DEEPLINK_PAGE_ID_EVENTS
+          }
+        }
+      };
+    } else if (identifier) {
+      return {
+        id: this.progressLoaderId,
+        ignoreTelemetry: {
+          when: {
+            interact: IgnoreTelemetryPatters.IGNORE_DEEPLINK_PAGE_ID_EVENTS,
+            impression: IgnoreTelemetryPatters.IGNORE_DEEPLINK_PAGE_ID_EVENTS
+          }
+        }
+      };
     }
+    return {
+      id: this.progressLoaderId
+    };
+  }
+
+  private closeProgressLoader() {
+    this.sbProgressLoader.hide({
+      id: this.progressLoaderId
+    });
+    this.progressLoaderId = undefined;
+  }
+
+  private generateUtmTelemetryEvent(identifier, dialCode, url) {
+    // TODO: Here identifier and dialcode both could be undefined.
+    // TODO: What needs to pass if deeplink in not having neither identifier nor dialcode.
+    const telemetryObject = new TelemetryObject(identifier ? identifier : dialCode, identifier ? 'Content' : 'qr', undefined);
+    const utmUrl = url.slice(url.indexOf('?') + 1);
+    const params: { [param: string]: string } = qs.parse(utmUrl);
+    const utmcData: CorrelationData[] = [];
+
+    if (utmUrl !== url) {
+      ContentUtil.genrateUTMCData(params).forEach((element) => {
+        utmcData.push(element);
+      });
+    }
+
+    const corRelationData: CorrelationData[] = [{
+      id: CorReleationDataType.DEEPLINK,
+      type: CorReleationDataType.ACCESS_TYPE
+    }];
+    if (utmcData && utmcData.length) {
+      this.telemetryService.updateCampaignParameters(utmcData);
+      this.telemetryGeneratorService.generateUtmInfoTelemetry(params, PageId.HOME, telemetryObject, corRelationData);
+    }
+
+    return utmcData;
+  }
+
+  private getQueryParamValue(payloadUrl: string, queryParam: string): string {
+    const url = new URL(payloadUrl);
+    return url.searchParams.get(queryParam);
   }
 
   private async isAppCompatible(requiredVersionCode) {
@@ -179,114 +374,266 @@ export class SplaschreenDeeplinkActionHandlerDelegate implements SplashscreenAct
     await this.appGlobalServices.openPopover(result);
   }
 
-  private async checkForDeeplinkWithoutOnboarding(content: any, inputUrl: string): Promise<void> {
-    this.savedUrl = null;
-    if (this.loginPopup) {
-      await this.loginPopup.dismiss();
+  private async setOnboradingData(payloadUrl) {
+    const lang = this.getQueryParamValue(payloadUrl, 'lang');
+    this.setAppLanguage(lang);
+
+    const userType = this.getQueryParamValue(payloadUrl, 'role');
+    this.setUserType(userType);
+
+    const channelSlug = this.getQueryParamValue(payloadUrl, 'channel');
+    if (channelSlug) {
+      const orgSearchRequest = {
+        filters: {
+          slug: channelSlug,
+          isRootOrg: true
+        }
+      };
+
+      try {
+        const result = await this.frameworkService.searchOrganization(orgSearchRequest).toPromise();
+        const org: any = result.content && result.content[0];
+        if (org) {
+          const channelId = org.identifier;
+          this.setProfileData(channelId, payloadUrl);
+
+          // Set the channel for page assemble and load the channel specifc course page is available.
+          this.pageAssembleService.setPageAssembleChannel({ channelId });
+
+          setTimeout(() => {
+            this.events.publish(EventTopics.COURSE_PAGE_ASSEMBLE_CHANNEL_CHANGE);
+          }, 500);
+        }
+      } catch (e) {
+        console.error(e);
+      }
     }
-    if (content && content.contentData && content.contentData.status === ContentFilterConfig.CONTENT_STATUS_UNLISTED &&
-      content.contentType !== ContentType.COURSE.toLowerCase() && content.mimeType !== MimeType.COLLECTION) {
-        this.showLoginWithoutOnboardingPopup(content.identifier || content.contentId);
-    } else {
-      this.savedUrl = inputUrl;
+
+    // initTabs(this.container, GUEST_TEACHER_TABS);
+    // this.events.publish('refresh:profile');
+  }
+
+  private async setAppLanguage(langCode: string) {
+    const selctedLangCode = await this.preferences.getString(PreferenceKey.SELECTED_LANGUAGE_CODE).toPromise();
+    const selectedLangLabel = await this.preferences.getString(PreferenceKey.SELECTED_LANGUAGE).toPromise();
+    if (!selctedLangCode && !selectedLangLabel) {
+      let languageDetail;
+      if (!langCode) {
+        // Set the default to english if not available.
+        langCode = 'en';
+      }
+      const LangList = appLanguages;
+      languageDetail = LangList.find(i => i.code === langCode);
+
+      await this.preferences.putString(PreferenceKey.SELECTED_LANGUAGE_CODE, languageDetail.code).toPromise();
+      this.translateService.use(languageDetail.code);
+
+      await this.preferences.putString(PreferenceKey.SELECTED_LANGUAGE, languageDetail.name).toPromise();
     }
   }
 
-  private handleNavigation(urlMatch: any, content?: Content | null, dialCode?, inputUrl?, cData?): void {
-    if (this._isDelegateReady) {
-      if (dialCode) {
-        this.appGlobalServices.skipCoachScreenForDeeplink = true;
-        // TODO check urlMatch.input
-        this.telemetryGeneratorService.generateAppLaunchTelemetry(LaunchType.DEEPLINK, inputUrl);
-        this.router.navigate([RouterLinks.SEARCH],
-          {
-            state: {
-              dialCode,
-              source: PageId.HOME,
-              corRelation: this.getCorrelationList(inputUrl)
-            }
-          });
-      } else if (urlMatch && urlMatch.groups && (urlMatch.groups.quizId || urlMatch.groups.contentId || urlMatch.groups.courseId)) {
-        this.navigateContent(urlMatch.groups.quizId || urlMatch.groups.contentId || urlMatch.groups.courseId, true,
-          content, inputUrl, cData);
+  private async setUserType(userType) {
+    if (!(userType && Object.values(ProfileType).includes(userType))) {
+      userType = ProfileType.TEACHER;
+    }
+    const selectedUserType = await this.preferences.getString(PreferenceKey.SELECTED_USER_TYPE).toPromise();
+    if (!selectedUserType) {
+      await this.preferences.putString(PreferenceKey.SELECTED_USER_TYPE, userType).toPromise();
+    }
+  }
+
+  private async setProfileData(channelId: string, payloadUrl) {
+    try {
+      const channelDetails: Channel = await this.frameworkService.getChannelDetails({ channelId }).toPromise();
+      const frameworkId = channelDetails.defaultFramework;
+
+      const categories = [
+        { code: FrameworkCategoryCode.BOARD, prevCode: null },
+        { code: FrameworkCategoryCode.MEDIUM, prevCode: FrameworkCategoryCode.BOARD },
+        { code: FrameworkCategoryCode.GRADE_LEVEL, prevCode: FrameworkCategoryCode.MEDIUM }
+      ];
+      const categoryData: any = {};
+      for (const category of categories) {
+        const boardCategoryTermsRequet: GetFrameworkCategoryTermsRequest = {
+          from: category.code === FrameworkCategoryCode.BOARD ? CachedItemRequestSourceFrom.SERVER : null,
+          frameworkId,
+          requiredCategories: FrameworkCategoryCodesGroup.DEFAULT_FRAMEWORK_CATEGORIES,
+          currentCategoryCode: category.code,
+          language: this.translateService.currentLang,
+          selectedTermsCodes: category.prevCode ? [category.prevCode] : null
+        };
+        const terms = await this.frameworkUtilService.getFrameworkCategoryTerms(boardCategoryTermsRequet).toPromise();
+        categoryData[category.code] = terms[0].code;
+      }
+
+      // Get the active profile
+      const activeSessionProfile = await this.profileService.getActiveSessionProfile({
+        requiredFields: ProfileConstants.REQUIRED_FIELDS
+      }).toPromise();
+
+      const userType = await this.preferences.getString(PreferenceKey.SELECTED_USER_TYPE).toPromise();
+      const updateProfileRequest: Profile = {
+        ...activeSessionProfile,
+        syllabus: [frameworkId],
+        board: [categoryData[FrameworkCategoryCode.BOARD]],
+        medium: [categoryData[FrameworkCategoryCode.MEDIUM]],
+        grade: [categoryData[FrameworkCategoryCode.GRADE_LEVEL]],
+        handle: 'Guest1',
+        profileType: userType as any,
+        source: ProfileSource.LOCAL
+      };
+      const profile: Profile = await this.profileService.updateProfile(updateProfileRequest).toPromise();
+
+      // TODO: need to revisit below section
+      // initTabs(this.container, GUEST_TEACHER_TABS);
+      // this.events.publish('refresh:profile');
+      this.appGlobalServices.guestUserProfile = profile;
+
+      this.commonUtilService.handleToTopicBasedNotification();
+
+      setTimeout(async () => {
+        this.appGlobalServices.setOnBoardingCompleted();
+        // this.navigateToCourse(payload.courseId, payloadUrl);
+        this.loginHandlerService.setDefaultProfileDetails();
+      }, 1000);
+
+      this.events.publish('onboarding-card:completed', { isOnBoardingCardCompleted: true });
+      this.events.publish('refresh:profile');
+      this.appGlobalServices.guestUserProfile = profile;
+      this.telemetryGeneratorService.generateProfilePopulatedTelemetry(
+        PageId.HOME, profile, 'auto', Environment.ONBOARDING, ContentUtil.extractBaseUrl(payloadUrl)
+      );
+
+      this.isOnboardingCompleted = true;
+    } catch (e) {
+      this.closeProgressLoader();
+    }
+  }
+
+  private async handleNavigation(payloadUrl, identifier, dialCode, route) {
+    if (dialCode) {
+      this.telemetryGeneratorService.generateAppLaunchTelemetry(LaunchType.DEEPLINK, payloadUrl);
+      this.setTabsRoot();
+      this.router.navigate([route],
+        {
+          state: {
+            dialCode,
+            source: PageId.HOME,
+            corRelation: this.getCorrelationList(payloadUrl)
+          }
+        });
+    } else if (identifier) {
+      const content = await this.getContentData(identifier);
+      if (!content) {
+        this.closeProgressLoader();
+      } else {
+        this.navigateContent(identifier, true, content, payloadUrl, route);
       }
     } else {
-      this.savedUrl = inputUrl;
+      this.setTabsRoot();
+      this.router.navigate([route]);
+      this.closeProgressLoader();
     }
   }
 
-  async navigateContent(identifier, isFromLink = false, content?: Content | null, source?: string, cData?) {
+  /////////////////////////////////////////////////
+
+  async navigateContent(
+    identifier, isFromLink = false, content?: Content | null,
+    payloadUrl?: string, route?: string, coreRelationList?: Array<CorrelationData>
+  ) {
     try {
+      // TODO not required resetSavedQuizContent
       this.appGlobalServices.resetSavedQuizContent();
       if (!content) {
         content = await this.getContentData(identifier);
       }
 
       if (isFromLink) {
-        this.telemetryGeneratorService.generateAppLaunchTelemetry(LaunchType.DEEPLINK, source);
+        this.telemetryGeneratorService.generateAppLaunchTelemetry(LaunchType.DEEPLINK, payloadUrl);
       }
 
-      this.appGlobalServices.skipCoachScreenForDeeplink = true;
-      if (content.contentType === ContentType.COURSE.toLowerCase()) {
-        this.router.navigate([RouterLinks.ENROLLED_COURSE_DETAILS],
-          {
-            state: {
-              content,
-              corRelation: this.getCorrelationList(source, cData)
-            }
-          });
-      } else if (content.mimeType === MimeType.COLLECTION) {
-        if (this.router.url && this.router.url.indexOf(RouterLinks.COLLECTION_DETAIL_ETB) !== -1) {
-          this.events.publish(EventTopics.DEEPLINK_COLLECTION_PAGE_OPEN, { content });
-          return;
+      if (content && content.contentData &&
+        content.contentData.status === ContentFilterConfig.CONTENT_STATUS_UNLISTED) {
+        this.navigateQuizContent(identifier, content, isFromLink, payloadUrl, coreRelationList);
+      } else if (content) {
+        if (!route) {
+          route = this.getRouterPath(content);
         }
-        this.router.navigate([RouterLinks.COLLECTION_DETAIL_ETB],
-          {
-            state: {
-              content,
-              corRelation: this.getCorrelationList(source, cData)
-            }
-          });
+        if (content.mimeType === MimeType.COLLECTION) {
+          this.navigateToCollection(identifier, content, payloadUrl, route, false, false, coreRelationList);
+        } else {
+          this.setTabsRoot();
+          if (this.context && this.context.notificationPayload && this.context.notificationPayload.actionData.openPlayer) {
+            const contentInfo: ContentInfo = {
+              telemetryObject: undefined,
+              rollUp: undefined,
+              correlationList: coreRelationList,
+              hierachyInfo: undefined,
+              course: undefined
+            };
+            const navExtras = {
+              state: {
+                content: content,
+              }
+            };
+            const telemetryObject = {
+              corRelationList: []
+            };
+            this.contentPlayerHandler.playContent(content, navExtras, telemetryObject, false, false);
+            this.closeProgressLoader();
+          } else {
+            await this.router.navigate([route],
+              {
+                state: {
+                  content,
+                  corRelation: this.getCorrelationList(payloadUrl)
+                }
+              });
+          }
+        }
       } else {
         if (!this.commonUtilService.networkInfo.isNetworkAvailable) {
           this.commonUtilService.showToast('NEED_INTERNET_FOR_DEEPLINK_CONTENT');
           this.appGlobalServices.skipCoachScreenForDeeplink = false;
+          this.closeProgressLoader();
           return;
-        }
-        if (content && content.contentData && content.contentData.status === ContentFilterConfig.CONTENT_STATUS_UNLISTED) {
-          this.navigateQuizContent(identifier, content, isFromLink, source, cData);
-        } else {
-          await this.router.navigate([RouterLinks.CONTENT_DETAILS],
-            {
-              state: {
-                content,
-                corRelation: this.getCorrelationList(source, cData)
-              }
-            });
         }
       }
     } catch (err) {
+      this.closeProgressLoader();
       console.log(err);
     }
   }
 
-  private async navigateQuizContent(identifier, content, isFromLink, source, cData?) {
+  private getRouterPath(content) {
+    let route;
+    if (content.primaryCategory === CsPrimaryCategory.COURSE.toLowerCase()) {
+      route = RouterLinks.ENROLLED_COURSE_DETAILS;
+    } else if (content.mimeType === MimeType.COLLECTION) {
+      route = RouterLinks.COLLECTION_DETAIL_ETB;
+    } else {
+      route = RouterLinks.CONTENT_DETAILS;
+    }
+    return route;
+  }
+
+  private async navigateQuizContent(identifier, content, isFromLink, payloadUrl, corRelationList) {
     this.appGlobalServices.limitedShareQuizContent = identifier;
     if (isFromLink) {
       this.limitedSharingContentLinkClickedTelemery();
     }
-    if (!this.appGlobalServices.isSignInOnboardingCompleted && this.appGlobalServices.isUserLoggedIn()) {
-      return;
-    }
     if (this.router.url && this.router.url.indexOf(RouterLinks.CONTENT_DETAILS) !== -1) {
       this.events.publish(EventTopics.DEEPLINK_CONTENT_PAGE_OPEN, { content, autoPlayQuizContent: true });
+      this.closeProgressLoader();
       return;
     }
+    this.setTabsRoot();
     await this.router.navigate([RouterLinks.CONTENT_DETAILS],
       {
         state: {
           content, autoPlayQuizContent: true,
-          corRelation: this.getCorrelationList(source, cData)
+          corRelation: this.getCorrelationList(payloadUrl, corRelationList)
         }
       });
   }
@@ -295,9 +642,9 @@ export class SplaschreenDeeplinkActionHandlerDelegate implements SplashscreenAct
     return new Promise(async resolve => {
       const content = await this.contentService.getContentDetails({ contentId }).toPromise()
         .catch(e => {
-          if (e instanceof HttpServerError) {
+          if (HttpServerError.isInstance(e)) {
             this.commonUtilService.showToast('ERROR_FETCHING_DATA');
-          } else if (e instanceof NetworkError) {
+          } else if (NetworkError.isInstance(e)) {
             this.commonUtilService.showToast('NEED_INTERNET_FOR_DEEPLINK_CONTENT');
           } else {
             this.commonUtilService.showToast('ERROR_CONTENT_NOT_AVAILABLE');
@@ -324,306 +671,228 @@ export class SplaschreenDeeplinkActionHandlerDelegate implements SplashscreenAct
     );
   }
 
-  // This method is called only when the user redirects directly from the Playstore
-  checkUtmContent(utmVal: string): void {
-    const utmRegex = new RegExp(String.raw`(?:utm_content=(?<utm_content>[^&]*))`);
-    const res = utmRegex.exec(utmVal);
-    if (res && res.groups && res.groups.utm_content && res.groups.utm_content.length) {
-      const payload = { url: res.groups.utm_content};
-      this.onAction(payload);
-    }
-  }
-
-  private async showLoginWithoutOnboardingPopup(quizId) {
-    this.appGlobalServices.resetSavedQuizContent();
-    this.loginPopup = await this.popoverCtrl.create({
-      component: SbPopoverComponent,
-      componentProps: {
-        sbPopoverMainTitle: this.commonUtilService.translateMessage('YOU_MUST_LOGIN_TO_ACCESS_QUIZ_CONTENT'),
-        metaInfo: this.commonUtilService.translateMessage('QUIZ_CONTENTS_ONLY_REGISTERED_USERS'),
-        sbPopoverHeading: this.commonUtilService.translateMessage('OVERLAY_SIGN_IN'),
-        isNotShowCloseIcon: true,
-        actionsButtons: [
-          {
-            btntext: this.commonUtilService.translateMessage('OVERLAY_SIGN_IN'),
-            btnClass: 'popover-color',
-            isInternetNeededMessage: 'NEED_INTERNET_FOR_DEEPLINK_CONTENT'
-          }
-        ]
-      },
-      cssClass: 'sb-popover info',
-    });
-    await this.loginPopup.present();
-
-    const { data } = await this.loginPopup.onDidDismiss();
-    if (data && data.canDelete) {
-      this.loginHandlerService.signIn();
-      this.appGlobalServices.limitedShareQuizContent = quizId;
-    }
-    this.loginPopup = null;
-  }
-
   // This method is called only when a deeplink is clicked before Onboarding is not completed
   eventToSetDefaultOnboardingData(): void {
     this.events.subscribe(EventTopics.SIGN_IN_RELOAD, () => {
-      this.setDefaultOnboardingData();
-    });
-  }
-
-  private async setDefaultOnboardingData(params?) {
-    this.isOnboardingCompleted =
-      (await this.preferences.getString(PreferenceKey.IS_ONBOARDING_COMPLETED).toPromise() === 'true') ? true : false;
-    if (!this.isOnboardingCompleted) {
-      this.setDefaultLanguageAndUserType(params);
-    }
-  }
-
-  private async setDefaultLanguageAndUserType(params?) {
-    let selectedLanguage;
-    if (params && params.langCode) {
-      const LangList = appLanguages;
-      selectedLanguage = LangList.find(i => i.code === params.langCode);
-    }
-
-    const langCode = await this.preferences.getString(PreferenceKey.SELECTED_LANGUAGE_CODE).toPromise();
-    if (!langCode) {
-      await this.preferences.putString(PreferenceKey.SELECTED_LANGUAGE_CODE,
-        (selectedLanguage && selectedLanguage.code) || 'en').toPromise();
-      this.translateService.use('en');
-    }
-
-    const langLabel = await this.preferences.getString(PreferenceKey.SELECTED_LANGUAGE).toPromise();
-    if (!langLabel) {
-      await this.preferences.putString(PreferenceKey.SELECTED_LANGUAGE,
-        (selectedLanguage && selectedLanguage.name) || 'English').toPromise();
-    }
-
-    // usertyoe == "TEACHER" for Quiz-link | "OTHER" for course link
-    const userType = await this.preferences.getString(PreferenceKey.SELECTED_USER_TYPE).toPromise();
-    if (!userType) {
-      await this.preferences.putString(PreferenceKey.SELECTED_USER_TYPE, (params && params.userType) || ProfileType.TEACHER).toPromise();
-    }
-  }
-
-  private generateUtmTelemetryEvent(urlMatch, dialCode, url) {
-    let identifier;
-    if (urlMatch && urlMatch.groups) {
-      identifier = urlMatch.groups.contentId ? urlMatch.groups.contentId : urlMatch.groups.courseId;
-    }
-
-    const telemetryObject = new TelemetryObject(identifier ? identifier : dialCode, identifier ? 'Content' : 'qr', undefined);
-    const utmUrl = url.slice(url.indexOf('?') + 1);
-    const params: {[param: string]: string} = qs.parse(utmUrl);
-    const utmcData: CorrelationData[] = [{
-      id: CorReleationDataType.DEEPLINK,
-      type: CorReleationDataType.ACCESS_TYPE
-    }];
-
-    ContentUtil.genrateUTMCData(params).forEach((element) => {
-      utmcData.push(element);
-    });
-    this.telemetryGeneratorService.generateUtmInfoTelemetry(params, PageId.HOME, utmcData, telemetryObject);
-
-    return utmcData;
-  }
-
-  private async checkCourseChannelSlug(payload, urlMatch, cData?) {
-    if (!this.isOnboardingCompleted) {
-      this.isOnboardingCompleted =
-        (await this.preferences.getString(PreferenceKey.IS_ONBOARDING_COMPLETED).toPromise() === 'true') ? true : false;
-    }
-
-    try {
-      const url: URL = new URL(payload.url);
-      const overrideChannelSlug = url.searchParams.get('channel');
-
-      if (overrideChannelSlug) {
-        const filters = {
-          slug: overrideChannelSlug,
-          isRootOrg: true
-        };
-        const result = await this.frameworkService.searchOrganization({ filters }).toPromise();
-        const org: any = result.content && result.content[0];
-        if (org) {
-          this.pageAssembleService.setPageAssembleChannel({
-            channelId: org.identifier
-          });
-
-          setTimeout(() => {
-            this.events.publish(EventTopics.COURSE_PAGE_ASSEMBLE_CHANNEL_CHANGE);
-          }, 500);
-          let courseId;
-          if (urlMatch && urlMatch.groups && urlMatch.groups.courseId) {
-            courseId = urlMatch.groups.courseId;
-          }
-          const event = {
-            url: payload.url,
-            courseId,
-            avb: '',
-            channelId: org.identifier,
-            extras: {
-              profile: {
-                userType: url.searchParams.get('role'),
-                langCode: url.searchParams.get('lang')
-              }
-            }
-          };
-          const isUrlTypeCourse = (new RegExp(String.raw`explore-course`)).test(event.url);
-          if (isUrlTypeCourse) {
-            const loader = await this.commonUtilService.getLoader(null, 'Initilizing profile...');
-            await loader.present();
-            const isChannelDetected = await this.onChannelDetected(event, cData);
-            await loader.dismiss();
-            if (isChannelDetected) {
-              return true;
-            }
-          }
-        }
+      if (!this.isOnboardingCompleted) {
+        this.setAppLanguage(undefined);
+        this.setUserType(undefined);
       }
-    } catch (e) {
-      return false;
-    }
-    return false;
+    });
   }
 
-  async onChannelDetected(event, cData?): Promise<boolean> {
-    if (!this.isOnboardingCompleted) {
-      this.isOnboardingCompleted =
-        (await this.preferences.getString(PreferenceKey.IS_ONBOARDING_COMPLETED).toPromise() === 'true') ? true : false;
+  async navigateToCollection(
+    identifier, content: Content | null, payloadUrl: string, route?: string,
+    isOnboardingSkipped = false, isFromChannelDeeplink = false, corRelationList?: Array<CorrelationData>
+  ) {
+    let childContentId;
+    if (payloadUrl) {
+      childContentId = this.getQueryParamValue(payloadUrl, 'moduleId');
     }
-    if (this.isOnboardingCompleted) {
-      this.navigateToCourse(event.courseId, event.url, cData);
-      return true;
+    if (!childContentId && payloadUrl) {
+      childContentId = this.getQueryParamValue(payloadUrl, 'contentId');
     }
 
-    const params = {
-      userType: (Object.values(ProfileType).includes(event.extras.profile.userType)) ? event.extras.profile.userType : undefined,
-      langCode: event.extras.profile.langCode || undefined
-    };
-    this.setDefaultLanguageAndUserType(params);
+    this.isChildContentFound = false;
+    this.childContent = undefined;
 
-    if (await this.setCourseOnboardingFlow(event)) {
-      this.appGlobalServices.skipCoachScreenForDeeplink = true;
-      return true;
+    if (childContentId) {
+      try {
+        if (content && content.isAvailableLocally) {
+          this.childContent = await this.getChildContents(childContentId);
+        } else {
+          this.importContent([identifier], false);
+          content = await this.getContentHeirarchy(identifier);
+          await this.getChildContent(content, childContentId);
+        }
+      } catch (e) {
+        console.error(e);
+      }
     }
-    return false;
-  }
-
-  async navigateToCourse(courseId, payloadUrl, cData?) {
-    if (courseId) {
-      const content: any = await this.getContentData(courseId);
-      if (content && content.contentType === ContentType.COURSE.toLowerCase()) {
-        this.router.navigate([RouterLinks.ENROLLED_COURSE_DETAILS],
-          {
-            state: {
-              content, isFromChannelDeeplink: true,
-              corRelation: this.getCorrelationList(payloadUrl, cData)
-            }
-          });
+    if (this.childContent) {
+      switch (ContentUtil.isTrackable(this.childContent)) {
+        case 0:
+          switch (ContentUtil.isTrackable(content)) {
+            case 1:
+              const chapterParams: NavigationExtras = {
+                state: {
+                  courseContent: content,
+                  chapterData: this.childContent,
+                  isOnboardingSkipped,
+                  isFromDeeplink: true
+                }
+              };
+              this.closeProgressLoader();
+              this.setTabsRoot();
+              this.router.navigate([`/${RouterLinks.CURRICULUM_COURSES}/${RouterLinks.CHAPTER_DETAILS}`],
+                chapterParams);
+              break;
+            case 0:
+              this.navService.navigateToCollection({
+                content,
+                corRelation: this.getCorrelationList(payloadUrl, corRelationList)
+              });
+              break;
+          }
+          break;
+        case -1:
+        case 1:
+          switch (ContentUtil.isTrackable(content)) {
+            case 1:
+              if (this.appGlobalServices.isGuestUser) { // guest user
+                this.setTabsRoot();
+                this.navService.navigateToTrackableCollection({
+                  content,
+                  isFromChannelDeeplink,
+                  corRelation: this.getCorrelationList(payloadUrl, corRelationList)
+                });
+              } else {
+                const fetchEnrolledCourseRequest: FetchEnrolledCourseRequest = {
+                  userId: await this.appGlobalServices.getActiveProfileUid(),
+                };
+                const enrolledCourses = await this.courseService.getEnrolledCourses(fetchEnrolledCourseRequest).toPromise();
+                let isCourseEnrolled;
+                if (enrolledCourses && enrolledCourses.length > 0) {
+                  isCourseEnrolled = enrolledCourses.find(course => {
+                    return course.contentId === childContentId;
+                  });
+                }
+                if (isCourseEnrolled) { // already enrolled
+                  this.setTabsRoot();
+                  this.navService.navigateToContent({
+                    content: this.childContent,
+                    depth: 1,
+                    isChildContent: true,
+                    isCourse: content.primaryCategory.toLowerCase() === CsPrimaryCategory.COURSE.toLowerCase(),
+                    isOnboardingSkipped,
+                    corRelation: this.getCorrelationList(payloadUrl, corRelationList)
+                  });
+                } else { // not enrolled in batch
+                  this.setTabsRoot();
+                  this.navService.navigateToTrackableCollection({
+                    content,
+                    isFromChannelDeeplink,
+                    corRelation: this.getCorrelationList(payloadUrl, corRelationList)
+                  });
+                }
+              }
+              break;
+            case -1:
+            case 0:
+              this.setTabsRoot();
+              this.navService.navigateToContent({
+                content: this.childContent,
+                depth: 1,
+                isChildContent: true,
+                corRelation: this.getCorrelationList(payloadUrl, corRelationList),
+                isCourse: content.primaryCategory.toLowerCase() === CsPrimaryCategory.COURSE.toLowerCase(),
+                isOnboardingSkipped
+              });
+              this.sbProgressLoader.hide({ id: content.identifier });
+              break;
+          }
+          break;
       }
     } else {
-      this.router.navigateByUrl(RouterLinks.TABS_COURSE);
-    }
-  }
-
-  setCourseOnboardingFlow(event) {
-
-    return new Promise(async resolve => {
-      try {
-        const channelDetails: Channel = await this.frameworkService.getChannelDetails({ channelId: event.channelId }).toPromise();
-        const frameworkId = channelDetails.defaultFramework;
-        const syllabus = frameworkId;
-
-        const categories = [
-          { code: FrameworkCategoryCode.BOARD, prevCode: null },
-          { code: FrameworkCategoryCode.MEDIUM, prevCode: FrameworkCategoryCode.BOARD },
-          { code: FrameworkCategoryCode.GRADE_LEVEL, prevCode: FrameworkCategoryCode.MEDIUM }
-        ];
-        const categoryData: any = {};
-        for (const category of categories) {
-          const boardCategoryTermsRequet: GetFrameworkCategoryTermsRequest = {
-            from: category.code === FrameworkCategoryCode.BOARD ? CachedItemRequestSourceFrom.SERVER : null,
-            frameworkId,
-            requiredCategories: FrameworkCategoryCodesGroup.DEFAULT_FRAMEWORK_CATEGORIES,
-            currentCategoryCode: category.code,
-            language: this.translateService.currentLang,
-            selectedTermsCodes: category.prevCode ? [category.prevCode] : null
-          };
-          const terms = (await this.frameworkUtilService.getFrameworkCategoryTerms(boardCategoryTermsRequet).toPromise());
-          categoryData[category.code] = terms[0].code;
-        }
-
-        const payload = {
-          syllabus,
-          board: categoryData[FrameworkCategoryCode.BOARD],
-          medium: categoryData[FrameworkCategoryCode.MEDIUM],
-          grade: categoryData[FrameworkCategoryCode.GRADE_LEVEL],
-          courseId: event.courseId
-        };
-        await this.submitProfileSettings(payload, event.url);
-        resolve(true);
-      } catch (e) {
-        resolve(false);
-        console.log(e);
+      this.setTabsRoot();
+      switch (ContentUtil.isTrackable(content)) {
+        case 1:
+          this.navService.navigateToTrackableCollection({
+            content,
+            isOnboardingSkipped,
+            isFromChannelDeeplink,
+            corRelation: this.getCorrelationList(payloadUrl, corRelationList)
+          });
+          break;
+        case 0:
+          this.navService.navigateToCollection({
+            content,
+            corRelation: this.getCorrelationList(payloadUrl, corRelationList)
+          });
+          break;
       }
-    });
-  }
-
-  private async submitProfileSettings(payload, payloadUrl) {
-    try {
-      const activeSessionProfile = await this.profileService.getActiveSessionProfile({
-        requiredFields: ProfileConstants.REQUIRED_FIELDS
-      }).toPromise();
-      const userType = await this.preferences.getString(PreferenceKey.SELECTED_USER_TYPE).toPromise();
-
-      const updateProfileRequest: Profile = {
-        ...activeSessionProfile,
-        syllabus: [payload.syllabus],
-        board: [payload.board],
-        medium: [payload.medium],
-        grade: [payload.grade],
-        handle: 'Guest1',
-        profileType: userType as any,
-        source: ProfileSource.LOCAL
-      };
-
-      const profile: Profile = await this.profileService.updateProfile(updateProfileRequest).toPromise();
-      initTabs(this.container, GUEST_TEACHER_TABS);
-      this.events.publish('refresh:profile');
-      this.appGlobalServices.guestUserProfile = profile;
-
-      this.commonUtilService.handleToTopicBasedNotification();
-
-      setTimeout(async () => {
-        this.appGlobalServices.setOnBoardingCompleted();
-        this.navigateToCourse(payload.courseId, payloadUrl);
-        this.loginHandlerService.setDefaultProfileDetails();
-      }, 1000);
-
-      this.events.publish('onboarding-card:completed', { isOnBoardingCardCompleted: true });
-      this.events.publish('refresh:profile');
-      this.appGlobalServices.guestUserProfile = profile;
-      this.telemetryGeneratorService.generateProfilePopulatedTelemetry(
-          PageId.HOME, profile, 'auto', Environment.ONBOARDING, ContentUtil.extractBaseUrl(payloadUrl)
-      );
-
-    } catch (e) {
-      console.log(e);
     }
-    return;
   }
 
-  private getCorrelationList(source, cData?): Array<CorrelationData> {
-    const corRelationList: Array<CorrelationData> = [{
-      id: ContentUtil.extractBaseUrl(source),
-      type: CorReleationDataType.SOURCE
-    }];
-    if (cData) {
-      cData.forEach(element => {
-        corRelationList.push(element);
+  private getCorrelationList(payloadUrl, corRelation?: Array<CorrelationData>) {
+    if (!corRelation) {
+      corRelation = [];
+    }
+    if (payloadUrl) {
+      corRelation.push({
+        id: ContentUtil.extractBaseUrl(payloadUrl),
+        type: CorReleationDataType.SOURCE
       });
     }
-    return corRelationList;
+    return corRelation;
+  }
+
+  async getChildContents(identifier) {
+    const childContentRequest: ChildContentRequest = {
+      contentId: identifier,
+      hierarchyInfo: null
+    };
+    return this.contentService.getChildContents(childContentRequest).toPromise();
+  }
+
+  async getContentHeirarchy(identifier: string) {
+    const request: ContentDetailRequest = {
+      contentId: identifier
+    };
+
+    return this.contentService.getContentHeirarchy(request).toPromise();
+  }
+
+  async getChildContent(content, childContentId) {
+    if (content.identifier === childContentId) {
+      this.childContent = content;
+      this.isChildContentFound = true;
+    } else if (!this.isChildContentFound && content && content.children) {
+      content.children.forEach((ele) => {
+        if (!this.isChildContentFound) {
+          this.getChildContent(ele, childContentId);
+        }
+      });
+    }
+    return (this.childContent);
+  }
+
+  private importContent(identifiers: Array<string>, isChild: boolean) {
+    const contentImportRequest: ContentImportRequest = {
+      contentImportArray: this.getImportContentRequestBody(identifiers, isChild),
+      contentStatusArray: ['Live'],
+      fields: ['appIcon', 'name', 'subject', 'size', 'gradeLevel'],
+    };
+    // // Call content service
+    this.contentService.importContent(contentImportRequest).toPromise();
+  }
+
+  private getImportContentRequestBody(identifiers: Array<string>, isChild: boolean): Array<ContentImport> {
+    const rollUpMap: { [key: string]: Rollup } = {};
+    const requestParams: ContentImport[] = [];
+    identifiers.forEach((value) => {
+      requestParams.push({
+        isChildContent: isChild,
+        destinationFolder: this.storageService.getStorageDestinationDirectoryPath(),
+        contentId: value,
+        correlationData: [],
+        rollUp: rollUpMap[value]
+      });
+    });
+
+    return requestParams;
+  }
+
+  // this only sets the Root for the Tabs.
+  private setTabsRoot() {
+    if (this.enableRootNavigation) {
+      try {
+        this.location.replaceState(this.router.serializeUrl(this.router.createUrlTree([RouterLinks.TABS])));
+      } catch (e) {
+        console.log(e);
+      }
+      this.enableRootNavigation = false;
+    }
   }
 
 }

@@ -1,5 +1,5 @@
 import { SearchPage } from './search.page';
-import { MimeType, ContentType, RouterLinks } from '@app/app/app.constant';
+import { MimeType, RouterLinks } from '@app/app/app.constant';
 import {
     FrameworkService,
     FrameworkUtilService,
@@ -27,8 +27,12 @@ import { Location } from '@angular/common';
 import { ImpressionType, PageId, Environment, InteractSubtype, InteractType, LogLevel, Mode } from '@app/services/telemetry-constants';
 import { of, throwError } from 'rxjs';
 import { NgZone, ChangeDetectorRef } from '@angular/core';
-import { FormAndFrameworkUtilService } from '../../services';
-
+import { FormAndFrameworkUtilService, AuditType, ImpressionSubtype, GroupHandlerService } from '../../services';
+import { SbProgressLoader } from '@app/services/sb-progress-loader.service';
+import { CsGroupAddableBloc } from '@project-sunbird/client-services/blocs';
+import { NavigationService } from '../../services/navigation-handler.service';
+import { ProfileHandler } from '@app/services/profile-handler';
+import { mockSupportedUserTypeConfig } from '../../services/profile-handler.spec.data';
 describe('SearchPage', () => {
     let searchPage: SearchPage;
     const mockAppGlobalService: Partial<AppGlobalService> = {
@@ -69,7 +73,7 @@ describe('SearchPage', () => {
     const mockRoterExtras = {
         extras: {
             state: {
-                contentType: 'contentType',
+                primaryCategories: 'primaryCategories',
                 corRelationList: 'corRelationList',
                 source: 'source',
                 enrolledCourses: 'enrolledCourses' as any,
@@ -105,7 +109,9 @@ describe('SearchPage', () => {
         putString: jest.fn(),
         getString: jest.fn(() => of('ka' as any))
     };
-    const mockCourseService: Partial<CourseService> = {};
+    const mockCourseService: Partial<CourseService> = {
+        getEnrolledCourses: jest.fn(() => of([]))
+    };
     const mocksearchHistoryService: Partial<SearchHistoryService> = {};
     const mockAppversion: Partial<AppVersion> = {
         getPackageName: jest.fn(() => Promise.resolve('org.sunbird.app')),
@@ -114,9 +120,27 @@ describe('SearchPage', () => {
     const mockchangeDetectionRef: Partial<ChangeDetectorRef> = {};
     const mockFormAndFrameworkUtilService: Partial<FormAndFrameworkUtilService> = {
         init: jest.fn(),
-        checkNewAppVersion: jest.fn(() => Promise.resolve({}))
+        checkNewAppVersion: jest.fn(() => Promise.resolve({})),
+        getFormFields: jest.fn(() => Promise.resolve([]))
     };
     const mockPopoverController: Partial<PopoverController> = {};
+    const mockSbProgressLoader: Partial<SbProgressLoader> = {};
+    const mockgroupHandlerService: Partial<GroupHandlerService> = {
+        addActivityToGroup: jest.fn()
+    };
+    const mockNavigationService: Partial<NavigationService> = {
+        navigateTo: jest.fn(),
+        navigateToCollection: jest.fn(),
+        navigateToDetailPage: jest.fn(),
+        navigateToContent: jest.fn(),
+        navigateToTrackableCollection: jest.fn()
+    };
+
+    const mockProfileHandler: Partial<ProfileHandler> = {
+        getSupportedUserTypes: jest.fn(() => Promise.resolve(mockSupportedUserTypeConfig))
+    };
+
+
     beforeAll(() => {
         searchPage = new SearchPage(
             mockContentService as ContentService,
@@ -144,6 +168,10 @@ describe('SearchPage', () => {
             mockLocation as Location,
             mockRouter as Router,
             mockNavCtrl as NavController,
+            mockSbProgressLoader as SbProgressLoader,
+            mockgroupHandlerService as GroupHandlerService,
+            mockNavigationService as NavigationService,
+            mockProfileHandler as ProfileHandler
         );
     });
 
@@ -154,7 +182,7 @@ describe('SearchPage', () => {
 
     it('should create a instance of searchPage', () => {
         expect(searchPage).toBeTruthy();
-        expect(searchPage.contentType).toEqual('contentType');
+        expect(searchPage.primaryCategories).toEqual('primaryCategories');
     });
 
     // arrange
@@ -191,12 +219,14 @@ describe('SearchPage', () => {
             setFocus: jest.fn()
         };
         jest.spyOn(searchPage, 'checkUserSession').mockImplementation();
+        mockSbProgressLoader.hide = jest.fn();
         // act
         searchPage.ionViewDidEnter();
         // assert
         expect(searchPage.checkUserSession).toHaveBeenCalled();
         setTimeout(() => {
             expect(searchPage.isFirstLaunch).toBe(false);
+            expect(mockSbProgressLoader.hide).toHaveBeenCalled();
             done();
         }, 200);
     });
@@ -330,10 +360,20 @@ describe('SearchPage', () => {
     });
 
     describe('openCollection', () => {
+        beforeEach(() => {
+            const state = {
+                pageIds: [],
+                groupId: 'g1',
+                params: {}
+            };
+            jest.spyOn(CsGroupAddableBloc.instance, 'state', 'get').mockReturnValue(state);
+            jest.spyOn(CsGroupAddableBloc.instance, 'updateState').mockImplementation();
+        });
         it('openCollection', () => {
             // arrange
             const collection = {
-                identifier: 'identifier'
+                identifier: 'identifier',
+                contentType: 'collection'
             };
             mockTelemetryGeneratorService.isCollection = jest.fn(() => true);
             // act
@@ -344,8 +384,8 @@ describe('SearchPage', () => {
                 InteractSubtype.CONTENT_CLICKED,
                 Environment.HOME,
                 PageId.DIAL_SEARCH,
-                expect.anything(),
-                expect.anything(),
+                { id: 'identifier', type: 'collection', version: '' },
+                { root: true },
                 undefined,
                 undefined
             );
@@ -354,7 +394,7 @@ describe('SearchPage', () => {
             // arrange
             const collection = {
                 identifier: 'identifier',
-                contentType: ContentType.COURSE
+                contentType: 'Course'
             };
             mockTelemetryGeneratorService.isCollection = jest.fn(() => true);
             searchPage.isDialCodeSearch = true;
@@ -365,8 +405,7 @@ describe('SearchPage', () => {
             searchPage.openCollection(collection);
             // assert
             expect(searchPage.enrolledCourses.length).toEqual(0);
-            expect(mockRouter.navigate).toHaveBeenCalledWith(
-                [RouterLinks.ENROLLED_COURSE_DETAILS],
+            expect(mockNavigationService.navigateToTrackableCollection).toHaveBeenCalledWith(
                 expect.anything()
             );
         });
@@ -374,7 +413,7 @@ describe('SearchPage', () => {
             // arrange
             const collection = {
                 identifier: 'identifier',
-                contentType: ContentType.COURSE
+                contentType: 'Course'
             };
             mockTelemetryGeneratorService.isCollection = jest.fn(() => true);
             searchPage.isDialCodeSearch = true;
@@ -399,7 +438,7 @@ describe('SearchPage', () => {
             // arrange
             const collection = {
                 identifier: 'identifier',
-                contentType: ContentType.COURSE
+                contentType: 'Course'
             };
             mockTelemetryGeneratorService.isCollection = jest.fn(() => true);
             searchPage.isDialCodeSearch = true;
@@ -421,7 +460,8 @@ describe('SearchPage', () => {
             // arrange
             const collection = {
                 identifier: 'identifier',
-                mimeType: MimeType.COLLECTION
+                mimeType: MimeType.COLLECTION,
+                contentType: 'collection'
             };
             mockTelemetryGeneratorService.isCollection = jest.fn(() => true);
             searchPage.isDialCodeSearch = true;
@@ -433,8 +473,7 @@ describe('SearchPage', () => {
             // act
             searchPage.openCollection(collection);
             // assert
-            expect(mockRouter.navigate).toHaveBeenCalledWith(
-                [RouterLinks.COLLECTION_DETAIL_ETB],
+            expect(mockNavigationService.navigateToCollection).toHaveBeenCalledWith(
                 expect.anything()
             );
         });
@@ -442,7 +481,8 @@ describe('SearchPage', () => {
             // arrange
             const collection = {
                 identifier: 'identifier',
-                mimeType: 'MimeType.COLLECTION'
+                mimeType: 'MimeType.COLLECTION',
+                contentType: 'collection'
             };
             mockTelemetryGeneratorService.isCollection = jest.fn(() => true);
             searchPage.isDialCodeSearch = true;
@@ -452,8 +492,7 @@ describe('SearchPage', () => {
             // act
             searchPage.openCollection(collection);
             // assert
-            expect(mockRouter.navigate).toHaveBeenCalledWith(
-                [RouterLinks.CONTENT_DETAILS],
+            expect(mockNavigationService.navigateToContent).toHaveBeenCalledWith(
                 expect.anything()
             );
         });
@@ -614,7 +653,8 @@ describe('SearchPage', () => {
         it('should set profile data accordingly', (done) => {
             // arrange
             const data = {
-                framework: 'framework1'
+                framework: 'framework1',
+                contentType: 'Resource'
             };
             const profile = {
                 syllabus: ['framework1']
@@ -637,7 +677,8 @@ describe('SearchPage', () => {
                 framework: 'framework1',
                 board: 'board',
                 medium: ['medium1'],
-                gradeLevel: ['grade1']
+                gradeLevel: ['grade1'],
+                contentType: 'Resource'
             };
             const profile = {
                 syllabus: ['framework']
@@ -688,7 +729,8 @@ describe('SearchPage', () => {
                 framework: 'framework1',
                 board: 'board',
                 medium: ['medium1'],
-                gradeLevel: ['grade1']
+                gradeLevel: ['grade1'],
+                contentType: 'Resource'
             };
             const profile = {
                 syllabus: ['framework1'],
@@ -740,7 +782,8 @@ describe('SearchPage', () => {
                 framework: 'framework1',
                 board: 'board',
                 medium: ['medium1'],
-                gradeLevel: ['grade1']
+                gradeLevel: ['grade1'],
+                contentType: 'Resource'
             };
             const profile = {
                 syllabus: ['framework1'],
@@ -796,7 +839,8 @@ describe('SearchPage', () => {
                 framework: 'framework1',
                 board: 'board',
                 medium: ['medium1'],
-                gradeLevel: ['grade1']
+                gradeLevel: ['grade1'],
+                contentType: 'Resource'
             };
             const profile = {
                 syllabus: ['framework1'],
@@ -920,6 +964,9 @@ describe('SearchPage', () => {
         it('should goto filter page on showFilter', (done) => {
             // arrange
             searchPage.source = 'source';
+            searchPage.initialFilterCriteria = {
+                    facetFilters: [{ name: 'name' }]
+                };
             searchPage.responseData = {
                 filterCriteria: {
                     facetFilters: [{ name: 'name' }]
@@ -989,7 +1036,8 @@ describe('SearchPage', () => {
             const searchContentResp = {
                 contentDataList: {
                     identifier: 'id'
-                }
+                },
+                filterCriteria: {}
             };
             mockContentService.searchContent = jest.fn(() => of(searchContentResp));
             mocksearchHistoryService.addEntry = jest.fn(() => of(undefined));
@@ -1126,7 +1174,8 @@ describe('SearchPage', () => {
                 isNetworkAvailable: true
             };
             const contentMock = {
-                identifier: 'id'
+                identifier: 'id',
+                contentType: 'Resource'
             };
             const getCourseBatchesResp = [
             ];
@@ -1142,8 +1191,7 @@ describe('SearchPage', () => {
             setTimeout(() => {
                 expect(searchPage.batches).toEqual(getCourseBatchesResp);
                 expect(searchPage.loader.dismiss).toHaveBeenCalled();
-                expect(mockRouter.navigate).toHaveBeenCalledWith(
-                    [RouterLinks.CONTENT_DETAILS],
+                expect(mockNavigationService.navigateToContent).toHaveBeenCalledWith(
                     expect.anything()
                 );
                 done();
@@ -1158,7 +1206,8 @@ describe('SearchPage', () => {
                 isNetworkAvailable: true
             };
             const contentMock = {
-                identifier: 'id'
+                identifier: 'id',
+                contentType: 'Resource'
             };
             mockCourseService.getCourseBatches = jest.fn(() => throwError({}));
             // act
@@ -1201,7 +1250,7 @@ describe('SearchPage', () => {
                     dialAssembleResp.sections
                 );
                 expect(searchPage.isDialCodeSearch).toBe(true);
-                expect(searchPage.contentType).toEqual(getSupportedContentFilterConfigResp);
+                expect(searchPage.primaryCategories).toEqual(getSupportedContentFilterConfigResp);
                 done();
             }, 0);
         });
@@ -1220,7 +1269,7 @@ describe('SearchPage', () => {
             // assert
             setTimeout(() => {
                 expect(searchPage.isDialCodeSearch).toBe(true);
-                expect(searchPage.contentType).toEqual(getSupportedContentFilterConfigResp);
+                expect(searchPage.primaryCategories).toEqual(getSupportedContentFilterConfigResp);
                 expect(mockCommonUtilService.showToast).toHaveBeenCalledWith('SOMETHING_WENT_WRONG');
                 expect(mockLocation.back).toHaveBeenCalled();
                 done();
@@ -1236,14 +1285,28 @@ describe('SearchPage', () => {
             mockFormAndFrameworkUtilService.getSupportedContentFilterConfig = jest.fn(
                 () => Promise.resolve(getSupportedContentFilterConfigResp));
             mockpageService.getPageAssemble = jest.fn(() => throwError({}));
+            searchPage.source = PageId.ONBOARDING_PROFILE_PREFERENCES;
+            mockTelemetryGeneratorService.generateImpressionTelemetry = jest.fn();
+            searchPage.source = PageId.ONBOARDING_PROFILE_PREFERENCES;
             // act
             searchPage.getContentForDialCode();
             // assert
             setTimeout(() => {
                 expect(searchPage.isDialCodeSearch).toBe(true);
-                expect(searchPage.contentType).toEqual(getSupportedContentFilterConfigResp);
+                expect(searchPage.primaryCategories).toEqual(getSupportedContentFilterConfigResp);
                 expect(mockCommonUtilService.showToast).toHaveBeenCalledWith('ERROR_OFFLINE_MODE');
                 expect(mockLocation.back).toHaveBeenCalled();
+                expect(mockTelemetryGeneratorService.generateImpressionTelemetry).toHaveBeenCalledWith(
+                    AuditType.TOAST_SEEN,
+                    ImpressionSubtype.OFFLINE_MODE,
+                    PageId.SCAN_OR_MANUAL,
+                    Environment.ONBOARDING,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    [{ id: 'abcdef', type: 'QR' }]
+                );
                 done();
             }, 0);
         });
@@ -1374,20 +1437,32 @@ describe('SearchPage', () => {
             // arrange
             const getContentDetailsResp = {
                 isAvailableLocally: true,
+                contentType: 'collection',
                 contentData: {
                     identifier: 'id1'
                 }
             };
+            const collection = {
+                identifier: 'identifier',
+                mimeType: MimeType.COLLECTION,
+                contentType: 'collection'
+            };
+            searchPage.isDialCodeSearch = true;
+            mockAppGlobalService.getProfileSettingsStatus = jest.fn(() => Promise.resolve({}));
+            mockAppGlobalService.setOnBoardingCompleted = jest.fn(() => Promise.resolve());
             mockContentService.getContentDetails = jest.fn(() => of(getContentDetailsResp));
+            mockZone.run = jest.fn((fn) => fn());
             mockAppGlobalService.getCurrentUser = jest.fn(() => { });
+            mockTelemetryGeneratorService.generateInteractTelemetry = jest.fn();
+            mockNavCtrl.navigateForward = jest.fn(() => Promise.resolve(true));
             // act
-            searchPage.checkParent('parent', 'child');
+            searchPage.checkParent('parent', collection);
             // assert
             setTimeout(() => {
-                expect(mockRouter.navigate).toHaveBeenCalledWith(
-                    [RouterLinks.CONTENT_DETAILS],
-                    expect.anything()
-                );
+                expect(mockContentService.getContentDetails).toHaveBeenCalled();
+                expect(mockZone.run).toHaveBeenCalled();
+                expect(mockTelemetryGeneratorService.generateInteractTelemetry).toHaveBeenCalled();
+                expect(mockNavCtrl.navigateForward).toHaveBeenCalled();
                 done();
             }, 0);
         });
@@ -1396,12 +1471,18 @@ describe('SearchPage', () => {
             const getContentDetailsResp = undefined;
             mockContentService.getContentDetails = jest.fn(() => of(getContentDetailsResp));
             mockAppGlobalService.getCurrentUser = jest.fn(() => { });
+            const content = {
+                isAvailableLocally: true,
+                contentType: 'resource',
+                contentData: {
+                    identifier: 'id1'
+                }
+            };
             // act
-            searchPage.checkParent('parent', 'child');
+            searchPage.checkParent('parent', content);
             // assert
             setTimeout(() => {
-                expect(mockRouter.navigate).toHaveBeenCalledWith(
-                    [RouterLinks.CONTENT_DETAILS],
+                expect(mockNavigationService.navigateToContent).toHaveBeenCalledWith(
                     expect.anything()
                 );
                 done();
@@ -1411,6 +1492,7 @@ describe('SearchPage', () => {
             // arrange
             const getContentDetailsResp = {
                 isAvailableLocally: false,
+                contentType: 'collection',
                 contentData: {
                     identifier: 'id1'
                 }
@@ -1451,9 +1533,9 @@ describe('SearchPage', () => {
         it('should push not downloaded identifiers in to queue', (done) => {
             // arrange
             const importContentResp = [
-                {status: ContentImportStatus.ENQUEUED_FOR_DOWNLOAD, identifier: 'id1'}];
+                { status: ContentImportStatus.ENQUEUED_FOR_DOWNLOAD, identifier: 'id1' }];
             mockContentService.importContent = jest.fn(() => of(importContentResp));
-            const parent = {identifier: 'id'};
+            const parent = { identifier: 'id' };
             // act
             searchPage.downloadParentContent(parent);
             // assert
@@ -1474,69 +1556,129 @@ describe('SearchPage', () => {
                 done();
             }, 0);
         });
-        // it('should show toast when content not available', (done) => {
-        //     // arrange
-        //     mockCommonUtilService.networkInfo = {
-        //         isNetworkAvailable: true
-        //     };
-        //     const importContentResp = [
-        //         {status: 'status', identifier: 'id1'}];
-        //     mockContentService.importContent = jest.fn(() => of(importContentResp));
-        //     const parent = {identifier: 'id'};
-        //     // act
-        //     searchPage.downloadParentContent(parent);
-        //     // assert
-        //     expect(searchPage.downloadProgress).toEqual(0);
-        //     expect(searchPage.isDownloadStarted).toEqual(true);
-        //     setTimeout(() => {
-        //         expect(searchPage.showLoading).toBe(false);
-        //         expect(searchPage.isDownloadStarted).toBe(false);
-        //         expect(searchPage.queuedIdentifiers.length).toEqual(0);
-        //         expect(mockCommonUtilService.showToast).toHaveBeenCalledWith('ERROR_CONTENT_NOT_AVAILABLE');
-        //         done();
-        //     }, 0);
-        // });
-        // it('should show toast when network not available', (done) => {
-        //     // arrange
-        //     mockCommonUtilService.networkInfo = {
-        //         isNetworkAvailable: false
-        //     };
-        //     const importContentResp = [
-        //         {status: 'status', identifier: 'id1'}];
-        //     mockContentService.importContent = jest.fn(() => of(importContentResp));
-        //     const parent = {identifier: 'id'};
-        //     // act
-        //     searchPage.downloadParentContent(parent);
-        //     // assert
-        //     expect(searchPage.downloadProgress).toEqual(0);
-        //     expect(searchPage.isDownloadStarted).toEqual(true);
-        //     setTimeout(() => {
-        //         expect(searchPage.showLoading).toBe(false);
-        //         expect(searchPage.isDownloadStarted).toBe(false);
-        //         expect(searchPage.queuedIdentifiers.length).toEqual(0);
-        //         expect(mockCommonUtilService.showToast).toHaveBeenCalledWith('ERROR_OFFLINE_MODE');
-        //         done();
-        //     }, 0);
-        // });
-        // it('should handle error scenario while importing', (done) => {
-        //     // arrange
-        //     mockCommonUtilService.networkInfo = {
-        //         isNetworkAvailable: true
-        //     };
-        //     mockContentService.importContent = jest.fn(() => throwError({ CONNECTION_ERROR: 'CONNECTION_ERROR' }));
-        //     const parent = {identifier: 'id'};
-        //     // act
-        //     searchPage.downloadParentContent(parent);
-        //     // assert
-        //     expect(searchPage.downloadProgress).toEqual(0);
-        //     expect(searchPage.isDownloadStarted).toEqual(true);
-        //     setTimeout(() => {
-        //         expect(searchPage.showLoading).toBe(false);
-        //         expect(searchPage.isDownloadStarted).toBe(false);
-        //         expect(mockCommonUtilService.showToast).toHaveBeenCalledWith('ERROR_OFFLINE_MODE');
-        //         done();
-        //     }, 0);
-        // });
+
+        describe('handleDeviceBackButton', () => {
+            it('should handle Device BackButton for dialcode', () => {
+                // arrange
+                const subscribeWithPriorityData = jest.fn((_, fn) => fn());
+                mockPlatform.backButton = {
+                    subscribeWithPriority: subscribeWithPriorityData
+                } as any;
+                jest.spyOn(searchPage, 'navigateToPreviousPage').mockImplementation(() => {
+                    return Promise.resolve();
+                });
+                searchPage.displayDialCodeResult = [{ dialCodeResult: ['result-1', 'result-2'] }];
+                mockTelemetryGeneratorService.generateBackClickedNewTelemetry = jest.fn();
+                // act
+                searchPage.handleDeviceBackButton();
+                // assert
+                expect(searchPage.displayDialCodeResult[0].dialCodeResult.length).toBeGreaterThan(0);
+                expect(mockTelemetryGeneratorService.generateBackClickedNewTelemetry).toHaveBeenCalledWith(
+                    true,
+                    Environment.HOME,
+                    PageId.QR_BOOK_RESULT
+                );
+            });
+
+            it('should handle Device BackButton', () => {
+                // arrange
+                const subscribeWithPriorityData = jest.fn((_, fn) => fn());
+                mockPlatform.backButton = {
+                    subscribeWithPriority: subscribeWithPriorityData
+                } as any;
+                jest.spyOn(searchPage, 'navigateToPreviousPage').mockImplementation(() => {
+                    return Promise.resolve();
+                });
+                searchPage.displayDialCodeResult = [{ dialCodeResult: [] }];
+                mockTelemetryGeneratorService.generateBackClickedTelemetry = jest.fn();
+                // act
+                searchPage.handleDeviceBackButton();
+                // assert
+                expect(searchPage.displayDialCodeResult[0].dialCodeResult.length).toBe(0);
+                expect(mockTelemetryGeneratorService.generateBackClickedTelemetry).toHaveBeenCalledWith(
+                    ImpressionType.SEARCH,
+                    Environment.HOME, false, undefined,
+                    [{ id: '', type: 'API' },
+                    { id: '', type: 'API' },
+                    { id: 'SearchResult', type: 'Section' },
+                    { id: 'filter', type: 'DiscoveryType' }]
+                );
+            });
+        });
+    });
+
+    describe('goBack', () => {
+        it('should generate beck telemetry for qrCode', () => {
+            searchPage.displayDialCodeResult = [{
+                dialCodeResult: ['result-1']
+            }];
+            mockTelemetryGeneratorService.generateBackClickedNewTelemetry = jest.fn();
+            searchPage.source = PageId.ONBOARDING_PROFILE_PREFERENCES;
+            // act
+            searchPage.goBack();
+            // assert
+            expect(mockTelemetryGeneratorService.generateBackClickedNewTelemetry).toHaveBeenCalledWith(
+                false,
+                Environment.ONBOARDING,
+                PageId.QR_BOOK_RESULT
+            );
+        });
+    });
+
+    describe('add activity', () => {
+        it('should addActivityToGroup', () => {
+            // arrange
+            searchPage.groupId = 'id1';
+            searchPage.searchContentResult = [
+                { identifier: 'some_id', selected: true, contentType: 'contentType' }
+            ];
+            searchPage.activityTypeData = {
+                activityType: 'some_activity_type'
+            }
+            // act
+            searchPage.addActivityToGroup();
+            // assert
+            expect(mockgroupHandlerService.addActivityToGroup).toHaveBeenCalledWith(
+                'id1',
+                'some_id',
+                'some_activity_type',
+                PageId.SEARCH,
+                expect.anything(),
+                -2
+            );
+        });
+
+        it('should not addActivityToGroup', () => {
+            // arrange
+            searchPage.searchContentResult = [
+                { identifier: 'id1', selected: true, contentType: 'contentType' }
+            ];
+            searchPage.activityList = [{
+                id: 'id1'
+            }];
+            // act
+            searchPage.addActivityToGroup();
+            // assert
+            expect(mockCommonUtilService.showToast).toHaveBeenCalled();
+        });
+        it('should open content', () => {
+            // arrange
+            const result = [
+                { identifier: 'some_id', selected: true, contentType: 'contentType' }
+            ];
+            searchPage.searchContentResult = result;
+            jest.spyOn(searchPage, 'openContent').mockImplementation();
+            // act
+            searchPage.openSelectedContent();
+            // assert
+            expect(searchPage.openContent).toHaveBeenCalledWith(
+                undefined,
+                result[0],
+                0,
+                undefined,
+                false
+            );
+        });
     });
 
 });

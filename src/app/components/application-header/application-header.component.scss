@@ -1,6 +1,7 @@
 @import "src/assets/styles/base/_variables.scss";
 @import "src/assets/styles/_custom-mixins.scss";
 @import "src/assets/styles/fonts.scss";
+@import "src/assets/styles/_variables.scss";
 
 ion-icon {
     width: 30px;
@@ -12,11 +13,92 @@ ion-icon {
   }
 :host {
     ion-title.color {
-        color:#024f9d;
+        color:$blue;
         font-weight:bold;
     }
 }
 
 .sb-menu-list > ion-item {
     padding: 3px 0;
+}
+
+.new-feature-badge{
+    color: map-get($colors, white);
+    margin-left: 8px;
+    background-color: map-get($colors, bright_red);
+    font-size: 8px;
+    font-weight: bold;
+    height: 12px;
+    .square-badge{
+        padding: 1px 6px;
+        float: left;
+        line-height: 1.5;
+    }
+    .circle-badge{
+        float: right;
+        border: 1px solid map-get($colors, white);
+        border-radius: 16px 0 0 16px;
+        background-color: map-get($colors, white);
+        height: 12px;
+        width: 16px;
+    }
+}
+
+.user-container{
+    padding: 8px;
+    background-color: $light-blue;
+
+    .use-app-label{
+        color: map-get($colors, granite_gray);
+        font-family: "Noto Sans", serif;
+        font-size: 14px;
+        letter-spacing: 0;
+        line-height: 14px;
+        margin: 8px 8px 0;
+    }
+
+    .managed-user-container {
+        display: flex;
+        text-align: center;
+
+        .mu-card {
+            flex: 0 0 33.33%;
+        }
+    }
+}
+
+.another-user-title{
+    background-color: map-get($colors, light_grayish_green);
+    color: $green;
+    font-family: "Noto Sans", serif;
+    font-size: 16px;
+    letter-spacing: 0;
+    line-height: 16px;
+    padding: 12px 16px;
+}
+
+.add-sign{
+    font-size: 24px;
+    padding: 0 4px ;
+}
+
+.sb-menu-item-switch{
+    position: relative;
+    top: 5px;
+}
+.badge-container{
+    position: absolute;
+    top: 5px;
+    left: 8px;
+    background: #e0005a;
+    color: white;
+    font-size: 9px;
+    padding-bottom: 3px;
+    border-radius: 6px;
+}
+
+.update-icon {
+    height: auto;
+    float: left;
+    margin-right: 16px;
 }

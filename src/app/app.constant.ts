@@ -1,55 +1,34 @@
-export class ContentType {
-    public static readonly STORY = 'Story';
-    public static readonly WORKSHEET = 'Worksheet';
-    public static readonly GAME = 'Game';
-    public static readonly RESOURCE = 'Resource';
-    public static readonly COLLECTION = 'Collection';
-    public static readonly TEXTBOOK = 'TextBook';
-    public static readonly E_TEXTBOOK = 'eTextBook';
-    public static readonly LESSON_PLAN = 'LessonPlan';
-    public static readonly COURSE = 'Course';
-    public static readonly CERTIFICATE = 'Certificate';
-    public static readonly TEXTBOOK_UNIT = 'TextBookUnit';
-    public static readonly LESSON_PLAN_UNIT = 'LessonPlanUnit';
-    public static readonly COURSE_UNIT = 'CourseUnit';
-    public static readonly FOCUS_SPOT = 'FocusSpot';
-    public static readonly LEARNING_OUTCOME_DEFINITION = 'LearningOutcomeDefinition';
-    public static readonly PRACTICE_QUESTION_SET = 'PracticeQuestionSet';
-    public static readonly CURIOSITY_QUESTIONS = 'CuriosityQuestions';
-    public static readonly MARKING_SCHEME_RUBRIC = 'MarkingSchemeRubric';
-    public static readonly EXPLANATION_RESOURCE = 'ExplanationResource';
-    public static readonly EXPERIENTIAL_RESOURCE = 'ExperientialResource';
-    public static readonly SELF_ASSESS = 'SelfAssess';
+import { CsPrimaryCategory } from '@project-sunbird/client-services/services/content';
+export class PrimaryCategory {
 
     public static readonly FOR_COURSE_TAB = [
-        ContentType.COURSE
+        CsPrimaryCategory.COURSE,
+        CsPrimaryCategory.TEACHER_RESOURCE,
+        CsPrimaryCategory.LEARNING_RESOURCE,
+        CsPrimaryCategory.EXPLANATION_CONTENT,
+        CsPrimaryCategory.CONTENT_PLAYLIST,
+        CsPrimaryCategory.DIGITAL_TEXTBOOK,
+        CsPrimaryCategory.PRACTICE_QUESTION_SET,
+        CsPrimaryCategory.E_TEXTBOOK,
+        CsPrimaryCategory.COURSE_ASSESSMENT
     ];
     public static readonly FOR_LIBRARY_TAB = [
-        ContentType.STORY,
-        ContentType.WORKSHEET,
-        ContentType.GAME,
-        ContentType.RESOURCE,
-        ContentType.COLLECTION,
-        ContentType.TEXTBOOK,
-        ContentType.E_TEXTBOOK,
-        ContentType.LESSON_PLAN,
-        ContentType.FOCUS_SPOT,
-        ContentType.LEARNING_OUTCOME_DEFINITION,
-        ContentType.PRACTICE_QUESTION_SET,
-        ContentType.CURIOSITY_QUESTIONS,
-        ContentType.MARKING_SCHEME_RUBRIC,
-        ContentType.EXPLANATION_RESOURCE,
-        ContentType.EXPERIENTIAL_RESOURCE
+        CsPrimaryCategory.COURSE,
+        CsPrimaryCategory.TEACHER_RESOURCE,
+        CsPrimaryCategory.LEARNING_RESOURCE,
+        CsPrimaryCategory.EXPLANATION_CONTENT,
+        CsPrimaryCategory.CONTENT_PLAYLIST,
+        CsPrimaryCategory.DIGITAL_TEXTBOOK,
+        CsPrimaryCategory.PRACTICE_QUESTION_SET,
+        CsPrimaryCategory.E_TEXTBOOK,
+        CsPrimaryCategory.COURSE_ASSESSMENT
     ];
-    // TODO: not need to pass content types, by default all the content types should display
-    public static readonly FOR_DOWNLOADED_TAB = [
-        ...ContentType.FOR_LIBRARY_TAB,
-        ...ContentType.FOR_COURSE_TAB
-    ];
+    public static readonly FOR_DOWNLOADED_TAB = PrimaryCategory.FOR_LIBRARY_TAB;
+
     public static readonly FOR_DIAL_CODE_SEARCH = [
-        ContentType.TEXTBOOK,
-        ContentType.TEXTBOOK_UNIT,
-        ContentType.COURSE
+        CsPrimaryCategory.DIGITAL_TEXTBOOK,
+        CsPrimaryCategory.TEXTBOOK_UNIT,
+        CsPrimaryCategory.COURSE
     ];
 }
 
@@ -78,7 +57,10 @@ export class Search {
         'gradeLevel',
         'subject',
         'medium',
-        'resourceType'
+        'primaryCategory',
+        'publisher',
+        'mimeType',
+        'audience'
     ];
 
     public static readonly FACETS_COURSE = [
@@ -88,6 +70,7 @@ export class Search {
         'subject',
         'medium',
         'contentType',
+        'primaryCategory',
         'channel'
     ];
 }
@@ -103,7 +86,6 @@ export class BatchConstants {
         'courseId',
         'status',
         'createdBy',
-        // 'creatorDetails',
         'startDate',
         'endDate',
         'enrollmentEndDate',
@@ -121,7 +103,8 @@ export class ProfileConstants {
         'topics',
         'organisations',
         'roles',
-        'locations'
+        'locations',
+        'declarations'
     ];
 
     public static readonly CONTACT_TYPE_PHONE = 'phone';
@@ -130,21 +113,35 @@ export class ProfileConstants {
 
 export class ExploreConstants {
     public static readonly REQUIRED_FIELDS = [
+        'identifier',
+        'pkgVersion',
         'name',
+        'appIcon',
+        'subject',
+        'medium',
+        'board',
+        'framework',
+        'gradeLevel',
+        'channel',
+        'contentType',
+        'mimeType',
+        'resourceType',
+        'status',
         'downloadUrl',
         'variants',
-        'mimeType',
-        'contentType',
-        'resourceType',
-        'board',
-        'medium',
-        'gradeLevel',
-        'subject',
+        'createdBy',
+        'originData',
+        'origin',
         'streamingUrl',
-        'framework',
-        'appIcon'
+        'dialecodes',
+        'size',
+        'batches',
+        'organisation',
+        'trackable',
+        'primaryCategory'
     ];
 }
+
 export class AudienceFilter {
     public static readonly GUEST_TEACHER = ['instructor', 'learner'];
     public static readonly GUEST_STUDENT = ['learner'];
@@ -177,14 +174,15 @@ export class ShareUrl {
 }
 
 export class MenuOverflow {
-    public static readonly MENU_GUEST = ['USERS_AND_GROUPS', 'REPORTS', 'SETTINGS'];
-    public static readonly MENU_LOGIN = ['USERS_AND_GROUPS', 'REPORTS', 'SETTINGS', 'LOGOUT'];
     public static readonly DOWNLOAD_FILTERS = ['CONTENT_SIZE', 'LAST_VIEWED'];
-}
-
-export class SideMenu {
-    public static readonly MENU_GUEST = ['USERS_AND_GROUPS', 'REPORTS', 'LANGUAGE', 'SETTINGS'];
-    public static readonly MENU_LOGIN = ['USERS_AND_GROUPS', 'REPORTS', 'LANGUAGE', 'SETTINGS', 'LOGOUT'];
+    public static readonly MENU_GROUP_CREATOR = ['MENU_EDIT_GROUP_DETAILS', 'FRMELEMENTS_LBL_DEACTIVATEGRP', 'MENU_DELETE_GROUP'];
+    public static readonly MENU_GROUP_ADMIN = ['MENU_EDIT_GROUP_DETAILS', 'FRMELEMENTS_LBL_DEACTIVATEGRP', 'MENU_LEAVE_GROUP'];
+    public static readonly MENU_GROUP_CREATOR_SUSPENDED = ['FRMELEMENTS_LBL_ACTIVATEGRP', 'MENU_DELETE_GROUP'];
+    public static readonly MENU_GROUP_ADMIN__SUSPENDED = ['FRMELEMENTS_LBL_ACTIVATEGRP', 'MENU_LEAVE_GROUP'];
+    public static readonly MENU_GROUP_NON_ADMIN = ['MENU_LEAVE_GROUP'];
+    public static readonly MENU_GROUP_MEMBER_NON_ADMIN = ['MENU_MAKE_GROUP_ADMIN', 'MENU_REMOVE_FROM_GROUP'];
+    public static readonly MENU_GROUP_MEMBER_ADMIN = ['DISMISS_AS_GROUP_ADMIN', 'MENU_REMOVE_FROM_GROUP'];
+    public static readonly MENU_GROUP_ACTIVITY_ADMIN = ['MENU_REMOVE_ACTIVITY'];
 }
 
 export class FormConstant {
@@ -224,6 +222,12 @@ export class PreferenceKey {
     public static readonly SYNC_CONFIG = 'sync_config';
     public static readonly COACH_MARK_SEEN = 'coach_mark_seen';
     public static readonly PAGE_ASSEMBLE_ORGANISATION_ID = 'page_assemble_organisation_id';
+    public static readonly CAMPAIGN_PARAMETERS = 'campaign_parameters';
+    public static readonly CREATE_GROUP_INFO_POPUP = 'create_group_info_popup';
+    public static readonly ADD_MEMBER_TO_GROUP_INFO_POPUP = 'add_member_to_group_info_popup';
+    public static readonly NOTIFICAITON_RECEIVED_AT = 'notification_received_at';
+    public static readonly CURRENT_SELECTED_THEME = 'current_selected_theme';
+    public static readonly DO_NOT_SHOW_PROFILE_NAME_CONFIRMATION_POPUP = 'do_not_show_pnc_popup';
 }
 
 export class GenericAppConfig {
@@ -334,21 +338,18 @@ export class ContentCard {
     public static readonly LAYOUT_SAVED_CONTENT = 'SavedContent';
 }
 
-export class CardSectionName {
-    public static readonly SECTION_SAVED_RESOURCES = 'Saved Resources';
-    public static readonly SECTION_RECENT_RESOURCES = 'Recently Viewed';
-}
-
 export class ViewMore {
     public static readonly PAGE_COURSE_ENROLLED = 'course.EnrolledCourses';
     public static readonly PAGE_COURSE_POPULAR = 'course.PopularContent';
-    public static readonly PAGE_RESOURCE_SAVED = 'resource.SavedResources';
-    public static readonly PAGE_RESOURCE_RECENTLY_VIEWED = 'resource.RecentlyViewed';
+    public static readonly PAGE_TV_PROGRAMS = 'library.TvPrograms';
 }
 
 export class Location {
     public static readonly TYPE_STATE = 'state';
     public static readonly TYPE_DISTRICT = 'district';
+    public static readonly TYPE_BLOCK = 'block';
+    public static readonly TYPE_CLUSTER = 'cluster';
+    public static readonly TYPE_SCHOOL = 'school';
 }
 
 export class FrameworkCategory {
@@ -381,6 +382,7 @@ export class SystemSettingsIds {
     public static readonly CONTENT_COMING_SOON_MSG = 'contentComingSoonMsg';
     public static readonly CONSUMPTION_FAQS = 'consumptionFaqs';
     public static readonly HOT_CODE_PUSH_KEY = 'hotCodePush';
+    public static readonly GROUPS_TNC = 'groupsTnc';
 }
 
 export class StoreRating {
@@ -404,6 +406,7 @@ export class ContentFilterConfig {
     public static readonly NAME_DOWNLOADS = 'downloads';
     public static readonly NAME_DIALCODE = 'dialcode';
     public static readonly CODE_CONTENT_TYPE = 'contentType';
+    public static readonly CODE_PRIMARY_CATEGORY = 'primaryCategory';
     public static readonly CONTENT_STATUS_UNLISTED = 'Unlisted';
 }
 
@@ -420,19 +423,13 @@ export class ActionType {
     public static readonly BOOK_UPDATE = 'bookUpdate';
     public static readonly UPDATE_APP = 'updateApp';
     public static readonly EXT_URL = 'extURL';
+    public static readonly CONTENT_URL = 'contentURL';
+    public static readonly CERTIFICATE = 'certificateUpdate';
 }
 
 export class RouterLinks {
     public static readonly TABS = 'tabs';
     public static readonly TABS_COURSE = 'tabs/courses';
-
-    // Users and Groups Routs
-    public static readonly USER_AND_GROUPS = 'user-and-groups';
-    public static readonly ADD_OR_REMOVE_GROUP_USER = 'add-or-remove-group-user';
-    public static readonly GROUP_DETAILS = 'group-details';
-    public static readonly CREATE_GROUP = 'create-group';
-    public static readonly GROUP_MEMBERS = 'group-members';
-    public static readonly SHARE_USER_AND_GROUPS = 'share-user-and-groups';
 
     // Profile Routs
     public static readonly PROFILE = 'profile';
@@ -440,6 +437,10 @@ export class RouterLinks {
     public static readonly GUEST_PROFILE = 'guest-profile';
     public static readonly PERSONAL_DETAILS_EDIT = 'personal-details-edit';
     public static readonly CATEGORIES_EDIT = 'categories-edit';
+    public static readonly SUB_PROFILE_EDIT = 'sub-profile-edit';
+    public static readonly MANAGE_USER_PROFILES = 'manage-user-profiles';
+    public static readonly SELF_DECLARED_TEACHER_EDIT = 'self-declared-teacher-edit';
+    public static readonly FRAMEWORK_SELECTION = 'framework-selection';
 
     // Courses Routs
     public static readonly COURSES = 'courses';
@@ -456,15 +457,16 @@ export class RouterLinks {
     public static readonly ENROLLMENT_DETAILS = 'enrollment-details';
     public static readonly TEXTBOOK_TOC = 'textbook-toc';
     public static readonly EXPLORE_BOOK = 'explore-book';
+    public static readonly RELEVANT_CONTENTS = 'relevant-contents';
+
+    // HOME Routes
+    public static readonly HOME = 'home';
+
+    // Discover(SEARCH) Routes
+    public static readonly DISCOVER = 'discover';
 
     // DownloadManger Routs
     public static readonly ACTIVE_DOWNLOADS = 'active-downloads';
-
-    // Reports Routs
-    public static readonly REPORTS_LIST = 'reports-list';
-    public static readonly REPORTS = 'reports';
-    public static readonly GROUP_REPORT = 'group-report';
-    public static readonly USER_REPORT = 'user-report';
 
     // Player Routs
     public static readonly PLAYER = 'player';
@@ -485,6 +487,7 @@ export class RouterLinks {
 
     // User Type Selection Routes
     public static readonly USER_TYPE_SELECTION = 'user-type-selection';
+    public static readonly USER_TYPE_SELECTION_LOGGEDIN = 'user-type-selection-loggedin';
 
     // View more activity Routes
     public static readonly VIEW_MORE_ACTIVITY = 'view-more-activity';
@@ -517,6 +520,8 @@ export class RouterLinks {
 
     public static readonly LIBRARY_TAB = `/${RouterLinks.TABS}/${RouterLinks.RESOURCES}`;
     public static readonly COURSE_TAB = `/${RouterLinks.TABS}/${RouterLinks.COURSES}`;
+    public static readonly HOME_TAB = `/${RouterLinks.TABS}/${RouterLinks.HOME}`;
+    public static readonly DISCOVER_TAB = `/${RouterLinks.TABS}/${RouterLinks.DISCOVER}`;
     public static readonly PROFILE_TAB = `/${RouterLinks.TABS}/${RouterLinks.PROFILE}`;
     public static readonly GUEST_PROFILE_TAB = `/${RouterLinks.TABS}/${RouterLinks.GUEST_PROFILE}`;
     public static readonly DOWNLOAD_TAB = `/${RouterLinks.TABS}/${RouterLinks.DOWNLOAD_MANAGER}`;
@@ -532,10 +537,24 @@ export class RouterLinks {
     // routing to Term of use Web Page
     public static readonly TERM_OF_USE = '/privacy-policy/terms-of-use.html';
 
-}
+    // My Groups
+    public static readonly MY_GROUPS = 'my-groups';
+    public static readonly CREATE_EDIT_GROUP = 'create-edit-group';
+    public static readonly MY_GROUP_DETAILS = 'group-details';
+    public static readonly ADD_MEMBER_TO_GROUP = 'add-member-to-group';
+    public static readonly ACTIVITY_DETAILS = 'activity-details';
+    public static readonly ACTIVITY_TOC = 'activity-toc';
+    public static readonly ADD_ACTIVITY_TO_GROUP = 'add-activity-to-group';
+    public static readonly ACTIVITY_VIEW_MORE = 'activity-view-more';
 
-export class LibraryCardTypes {
-    public static readonly QRCODE_RESULT = 'qrcode_result';
+    // Curriculum courses
+    public static readonly CURRICULUM_COURSES = 'curriculum-courses';
+    public static readonly CURRICULUM_COURSE_DETAILS = 'curriculum-course-details';
+    public static readonly CHAPTER_DETAILS = 'chapter-details';
+
+    // category-list page
+    public static readonly CATEGORY_LIST = 'category-list';
+    public static readonly DISCUSSION = 'discussion-forum';
 }
 
 export class ShareItemType {
@@ -556,7 +575,46 @@ export class LaunchType {
     public static readonly SIDELOAD = 'sideload';
 }
 
+export class ProgressPopupContext {
+    public static readonly DEEPLINK = 'deeplink';
+}
+
 export class RegexPatterns {
     public static readonly SPECIALCHARECTERSANDEMOJIS =
-    /([-!$%^&*()_+÷|~=`{}[:;<>?,.×/£¥"'@#\]]|[\u2700-\u27bf]|(?:\ud83c[\udde6-\uddff]){2}|[\ud800-\udbff][\udc00-\udfff]|[\u0023-\u0039]\ufe0f?\u20e3|\u3299|\u3297|\u303d|\u3030|\u24c2|\ud83c[\udd70-\udd71]|\ud83c[\udd7e-\udd7f]|\ud83c\udd8e|\ud83c[\udd91-\udd9a]|\ud83c[\udde6-\uddff]|\ud83c[\ude01-\ude02]|\ud83c\ude1a|\ud83c\ude2f|\ud83c[\ude32-\ude3a]|\ud83c[\ude50-\ude51]|\u203c|\u2049|[\u25aa-\u25ab]|\u25b6|\u25c0|[\u25fb-\u25fe]|\u00a9|\u00ae|\u2122|\u2139|\ud83c\udc04|[\u2600-\u26FF]|\u2b05|\u2b06|\u2b07|\u2b1b|\u2b1c|\u2b50|\u2b55|\u231a|\u231b|\u2328|\u23cf|[\u23e9-\u23f3]|[\u23f8-\u23fa]|\ud83c\udccf|\u2934|\u2935|[\u2190-\u21ff])/g;
+        /([-!$%^&*()_+÷|~=`{}[:;<>?,.×/£¥"'@#\]]|[\u2700-\u27bf]|(?:\ud83c[\udde6-\uddff]){2}|[\ud800-\udbff][\udc00-\udfff]|[\u0023-\u0039]\ufe0f?\u20e3|\u3299|\u3297|\u303d|\u3030|\u24c2|\ud83c[\udd70-\udd71]|\ud83c[\udd7e-\udd7f]|\ud83c\udd8e|\ud83c[\udd91-\udd9a]|\ud83c[\udde6-\uddff]|\ud83c[\ude01-\ude02]|\ud83c\ude1a|\ud83c\ude2f|\ud83c[\ude32-\ude3a]|\ud83c[\ude50-\ude51]|\u203c|\u2049|[\u25aa-\u25ab]|\u25b6|\u25c0|[\u25fb-\u25fe]|\u00a9|\u00ae|\u2122|\u2139|\ud83c\udc04|[\u2600-\u26FF]|\u2b05|\u2b06|\u2b07|\u2b1b|\u2b1c|\u2b50|\u2b55|\u231a|\u231b|\u2328|\u23cf|[\u23e9-\u23f3]|[\u23f8-\u23fa]|\ud83c\udccf|\u2934|\u2935|[\u2190-\u21ff])/g;
+}
+
+export class IgnoreTelemetryPatters {
+    public static readonly IGNORE_DEEPLINK_PAGE_ID_EVENTS = /{"pageId":"resources"}|{"pageId":"library"}/;
+    public static readonly IGNORE_DIAL_CODE_PAGE_ID_EVENTS = /{"pageId":"resources"}|{"pageId":"library"}|{"pageId":"home"}|{"pageId":"search"}/;
+    public static readonly IGNORE_CHANNEL_IMPRESSION_EVENTS = /{"pageId":"resources"}|{"pageId":"library"}|{"pageId":"home"}|{"pageId":"onboarding-language-setting"}|{"pageId":"user-type-selection"}|{"pageId":profile-settings"}/;
+    public static readonly IGNORE_SIGN_IN_PAGE_ID_EVENTS = /{"pageId":"resources"}|{"pageId":"library"}|{"pageId":"home"}|{"pageId":"profile"}|{"pageId":"courses"}/;
+
+}
+
+export class FormConfigCategories {
+    public static readonly CONTENT = 'content';
+}
+export class FormConfigSubcategories {
+    public static readonly CONTENT_QUALITY = 'contentquality';
+    public static readonly CONTENT_AVAILABILITY = 'contentavailability';
+}
+
+export class GroupErrorCodes {
+    public static readonly EXCEEDED_GROUP_MAX_LIMIT = 'EXCEEDED_GROUP_MAX_LIMIT';
+    public static readonly EXCEEDED_MEMBER_MAX_LIMIT = 'EXCEEDED_MEMBER_MAX_LIMIT';
+    public static readonly EXCEEDED_ACTIVITY_MAX_LIMIT = 'EXCEEDED_ACTIVITY_MAX_LIMIT';
+}
+
+export class AppThemes {
+    public static readonly DEFAULT = 'DEFAULT';
+    public static readonly JOYFUL = 'JOYFUL';
+}
+
+export class StatusBarTheme {
+    public static readonly SET_DEFAULT = '#BB000000';
+}
+
+export class AssessmentConstant {
+    public static readonly MAX_ATTEMPTS = 3;
 }

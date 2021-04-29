@@ -30,6 +30,10 @@ const routes: Routes = [
     resolve: { message: HasNotSelectedUserTypeGuard }
   },
   {
+    path: `${RouterLinks.USER_TYPE_SELECTION_LOGGEDIN}`,
+    loadChildren: './user-type-selection/user-type-selection.module#UserTypeSelectionPageModule'
+  },
+  {
     path: RouterLinks.PROFILE_SETTINGS,
     loadChildren: './profile-settings/profile-settings.module#ProfileSettingsPageModule',
     canLoad: [HasNotBeenOnboardedGuard],
@@ -39,15 +43,20 @@ const routes: Routes = [
     path: RouterLinks.TABS,
     loadChildren: './tabs/tabs.module#TabsPageModule'
   },
-
-  { path: RouterLinks.USER_AND_GROUPS, loadChildren: './user-and-groups/user-and-groups.module#UserAndGroupsPageModule' },
   {
     path: RouterLinks.RESOURCES,
     loadChildren: './resources/resources.module#ResourcesModule',
   },
+  {
+    path: RouterLinks.HOME,
+    loadChildren: './home/home.module#HomePageModule'
+  },
+  {
+    path: RouterLinks.DISCOVER,
+    loadChildren: './discover/discover.module#DiscoverPageModule'
+  },
   { path: RouterLinks.VIEW_MORE_ACTIVITY, loadChildren: './view-more-activity/view-more-activity.module#ViewMoreActivityModule' },
   { path: RouterLinks.SETTINGS, loadChildren: './settings/settings.module#SettingsPageModule' },
-  { path: RouterLinks.REPORTS, loadChildren: './reports/reports.module#ReportsPageModule' },
   { path: RouterLinks.DOWNLOAD_MANAGER, loadChildren: './download-manager/download-manager.module#DownloadManagerPageModule' },
   { path: RouterLinks.STORAGE_SETTINGS, loadChildren: './storage-settings/storage-settings.module#StorageSettingsPageModule' },
   { path: RouterLinks.COURSES, loadChildren: './courses/courses.module#CoursesPageModule' },
@@ -87,6 +96,14 @@ const routes: Routes = [
   {
     path: RouterLinks.DISTRICT_MAPPING,
     loadChildren: './district-mapping/district-mapping.module#DistrictMappingPageModule'
+  },
+  { path: RouterLinks.MY_GROUPS, loadChildren: './my-groups/my-groups.module#MyGroupsPageModule' },
+  { path: RouterLinks.CURRICULUM_COURSES, loadChildren: './curriculum-courses/curriculum-courses.module#CurriculumCoursesPageModule' },
+  { path: RouterLinks.CATEGORY_LIST, loadChildren: './category-list/category-list-page.module#CategoryListPageModule'},
+  { path: RouterLinks.GUEST_PROFILE, loadChildren: './profile/guest-profile/guest-profile.module#GuestProfilePageModule' },
+
+  {
+    path: RouterLinks.DISCUSSION, loadChildren: './discussion-forum/discussion-forum.module#DiscussionForumModule'
   }
 ];
 

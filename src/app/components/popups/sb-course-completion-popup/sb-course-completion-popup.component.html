@@ -1,0 +1,21 @@
+<ion-content>
+    <div class="course-completion-popup-container">
+        <div class="cc-popup-close clearfix">
+            <ion-icon class="pull-right" name="md-close" (click)="close()"></ion-icon>
+        </div>
+        <div class="ion-text-center">
+            <div>
+                <img src="assets/imgs/Badge green.svg" alt="">
+            </div>
+            <div class="course-completion-title">{{'CONGRATULATIONS' | translate}}</div>
+            <div class="course-completion-info">{{'FRMELEMNTS_MSG_TRAINING_COMPLETED_SUCCESSFULLY' | categoryKeyTranslate : course }}</div>
+            <div class="course-completion-cert" *ngIf="isCertified && certificateDescription">
+                <p>{{'FRMELEMNTS_MSG_COURSE_COMPLETION_POPUP_DESC' | categoryKeyTranslate : course }}</p>
+                <p>{{certificateDescription}}</p>
+            </div>
+            <div class="course-completion-cert" *ngIf="isOnline && !isCertified">
+                {{'FRMELEMNTS_MSG_COURSE_COMPLETION_POPUP_NO_CERTIFICATE' | categoryKeyTranslate : course }}
+            </div>
+        </div>
+    </div>
+</ion-content>
